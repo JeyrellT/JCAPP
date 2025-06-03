@@ -1,2 +1,2 @@
 # JCAPP
-Applicacion para llevar control de los procesos
+Aplicación para llevar control de los procesos
