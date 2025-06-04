@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
  * Componente para mostrar un botón con degradado
  * 
  * @param {Object} props - Propiedades del componente
- * @param {string} [props.variant="primary"] - Variante de color (primary, secondary, success, danger)
+ * @param {string} [props.variant="primary"] - Variante de color (primary, secondary, success, danger, warning, info)
  * @param {string} [props.to] - Ruta para Link de react-router-dom (opcional)
  * @param {string} [props.href] - URL para enlace externo (opcional)
  * @param {string} [props.size="md"] - Tamaño del botón (sm, md, lg)
