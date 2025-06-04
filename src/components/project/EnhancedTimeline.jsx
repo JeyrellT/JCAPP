@@ -323,10 +323,7 @@ const EnhancedTimeline = ({ projectId }) => {
     
     // Update in backend/context
     if (project) {
-      updateProject({
-        ...project,
-        tasks: updatedTasks
-      });
+      updateProject(projectId, { tasks: updatedTasks });
     }
   };
   
