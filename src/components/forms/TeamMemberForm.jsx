@@ -1,264 +1,249 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Users, 
-  Save, 
-  X, 
-  Trash2, 
-  UserPlus,
-  RefreshCw
-} from 'lucide-react';
+import { useState } from 'react';
+import { Trash2, UserPlus } from 'lucide-react';
 import { useLeanSixSigma } from '../../contexts/LeanSixSigmaContext';
+import GradientButton from '../common/GradientButton';
+import Notification from '../common/Notification';
+import EmptyState from '../common/EmptyState';
+import { PROJECT_FORM_RULES, COMMON_TEAM_ROLES } from './NewProjectForm';
+
+const EMPTY_NEW_MEMBER = { name: '', role: '', position: '', email: '' };
 
 /**
- * Formulario para gestionar miembros del equipo
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- * @param {Function} props.onClose - Función a llamar al cerrar
- * @param {Function} props.onSave - Función a llamar después de guardar
+ * Gestor del equipo de un proyecto. Vive dentro de un `<Modal>` montado por
+ * ProjectDetailsPage: no lleva cabecera ni overlay propios (el Modal los pone).
+ *
+ * @param {Object} props
+ * @param {string} props.projectId - ID del proyecto.
+ * @param {Function} [props.onClose] - Se llama al cerrar sin persistir cambios adicionales.
+ * @param {Function} [props.onSave] - Se llama tras guardar, con el equipo resultante.
  */
 const TeamMemberForm = ({ projectId, onClose, onSave }) => {
   const { getProject, updateProject } = useLeanSixSigma();
-  
-  const [isLoading, setIsLoading] = useState(true);
+  const project = getProject(projectId);
+
+  const [teamMembers, setTeamMembers] = useState(() => project?.team || []);
+  const [newMember, setNewMember] = useState(EMPTY_NEW_MEMBER);
+  const [formError, setFormError] = useState('');
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [projectData, setProjectData] = useState(null);
-  const [teamMembers, setTeamMembers] = useState([]);
-  
-  // Nuevo miembro
-  const [newMember, setNewMember] = useState({
-    name: '',
-    role: '',
-    email: ''
-  });
-  
-  // Roles comunes para autocompletar
-  const commonRoles = [
-    'Líder del Proyecto',
-    'Patrocinador',
-    'Black Belt',
-    'Green Belt',
-    'Analista de Datos',
-    'Stakeholder',
-    'Experto en Procesos',
-    'Representante de Operaciones',
-    'Ingeniero de Calidad'
-  ];
-  
-  // Cargar datos del proyecto
-  useEffect(() => {
-    const project = getProject(projectId);
-    if (project) {
-      setProjectData(project);
-      setTeamMembers(project.team || []);
-    }
-    setIsLoading(false);
-  }, [projectId, getProject]);
-  
-  // Función para añadir un nuevo miembro
+  const [notice, setNotice] = useState({ show: false, message: '' });
+
   const handleAddMember = () => {
-    if (!newMember.name.trim() || !newMember.role.trim()) {
+    const name = newMember.name.trim();
+    const role = newMember.role.trim();
+
+    if (!name || !role) {
+      setFormError('Nombre y rol son obligatorios para añadir un integrante.');
       return;
     }
-    
-    const memberWithId = {
-      ...newMember,
-      id: `team-${Date.now()}`
-    };
-    
-    setTeamMembers([...teamMembers, memberWithId]);
-    
-    // Limpiar formulario
-    setNewMember({
-      name: '',
-      role: '',
-      email: ''
-    });
-  };
-  
-  // Función para eliminar un miembro
-  const handleRemoveMember = (id) => {
-    setTeamMembers(teamMembers.filter(member => member.id !== id));
-  };
-  
-  // Función para actualizar un miembro existente
-  const handleUpdateMember = (id, field, value) => {
-    setTeamMembers(teamMembers.map(member => 
-      member.id === id ? { ...member, [field]: value } : member
-    ));
-  };
-  
-  // Función para guardar cambios
-  const handleSave = () => {
-    if (!projectData) return;
-    
-    setIsSaving(true);
-    
-    // Actualizar proyecto con los miembros del equipo
-    updateProject(projectId, {
-      team: teamMembers,
-      updatedAt: new Date().toISOString()
-    });
-    
-    // Simular tiempo de guardado
-    setTimeout(() => {
-      setIsSaving(false);
-      if (onSave) onSave(teamMembers);
-      if (onClose) onClose();
-    }, 800);
-  };
-  
-  // Variantes para animaciones
-  const formVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      scale: 1,
-      transition: {
-        duration: 0.3
-      }
+    if (newMember.email && !PROJECT_FORM_RULES.EMAIL_PATTERN.test(newMember.email.trim())) {
+      setFormError('Ese correo no parece válido.');
+      return;
     }
+
+    const member = {
+      id: `team-${Date.now()}`,
+      name,
+      role,
+      position: newMember.position.trim(),
+      email: newMember.email.trim(),
+    };
+
+    setTeamMembers((prev) => [...prev, member]);
+    setNewMember(EMPTY_NEW_MEMBER);
+    setFormError('');
+    setNotice({ show: true, message: `${name} se unió al equipo` });
   };
-  
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center p-8">
-        <RefreshCw size={24} className="text-blue-600 animate-spin" />
-      </div>
-    );
+
+  const handleUpdateMember = (id, field, value) => {
+    setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)));
+  };
+
+  const handleRemoveMember = (id) => {
+    setTeamMembers((prev) => prev.filter((m) => m.id !== id));
+    setConfirmRemoveId(null);
+  };
+
+  const handleSave = () => {
+    setIsSaving(true);
+    updateProject(projectId, { team: teamMembers });
+    onSave?.(teamMembers);
+    onClose?.();
+  };
+
+  if (!project) {
+    return <p className="text-sm text-content-secondary">No se encontró el proyecto.</p>;
   }
-  
+
   return (
-    <motion.div
-      variants={formVariants}
-      initial="hidden"
-      animate="visible"
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden max-w-4xl w-full"
-    >
-      {/* Cabecera */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
-          <Users size={20} className="mr-2 text-blue-600 dark:text-blue-400" />
-          Gestionar Equipo del Proyecto
-        </h2>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          <X size={20} />
-        </button>
-      </div>
-      
-      {/* Contenido */}
-      <div className="p-6">
-        {/* Formulario para añadir miembro */}
-        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            Añadir Nuevo Miembro
-          </h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+    <div>
+      <Notification
+        message={notice.message}
+        type="success"
+        show={notice.show}
+        onClose={() => setNotice({ show: false, message: '' })}
+        duration={2000}
+      />
+
+      <div className="rounded-lg border border-line bg-surface-sunken/40 p-4">
+        <h3 className="mb-3 text-sm font-medium text-content-secondary">Añadir nuevo miembro</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label htmlFor="new-member-name" className="sr-only">Nombre</label>
             <input
+              id="new-member-name"
               type="text"
+              className="input"
               value={newMember.name}
-              onChange={(e) => setNewMember({...newMember, name: e.target.value})}
-              placeholder="Nombre o Cargo"
-              className="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            
-            <div className="relative">
-              <input
-                type="text"
-                value={newMember.role}
-                onChange={(e) => setNewMember({...newMember, role: e.target.value})}
-                placeholder="Rol en el Proyecto"
-                className="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white w-full"
-                list="rolesList"
-              />
-              <datalist id="rolesList">
-                {commonRoles.map((role, index) => (
-                  <option key={index} value={role} />
-                ))}
-              </datalist>
-            </div>
-            
-            <input
-              type="email"
-              value={newMember.email}
-              onChange={(e) => setNewMember({...newMember, email: e.target.value})}
-              placeholder="Email (opcional)"
-              className="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+              placeholder="Nombre"
             />
           </div>
-          
-          <button
-            type="button"
-            onClick={handleAddMember}
-            disabled={!newMember.name.trim() || !newMember.role.trim()}
-            className="w-full px-3 py-2 bg-blue-600 text-white rounded-md flex justify-center items-center text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <UserPlus size={16} className="mr-1.5" /> Añadir Miembro
-          </button>
+          <div>
+            <label htmlFor="new-member-role" className="sr-only">Rol</label>
+            <input
+              id="new-member-role"
+              type="text"
+              className="input"
+              value={newMember.role}
+              onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+              placeholder="Rol en el proyecto"
+              list="team-form-common-roles"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-member-position" className="sr-only">Cargo</label>
+            <input
+              id="new-member-position"
+              type="text"
+              className="input"
+              value={newMember.position}
+              onChange={(e) => setNewMember({ ...newMember, position: e.target.value })}
+              placeholder="Cargo (opcional)"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-member-email" className="sr-only">Correo</label>
+            <input
+              id="new-member-email"
+              type="email"
+              className="input"
+              value={newMember.email}
+              onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+              placeholder="Correo (opcional)"
+            />
+          </div>
         </div>
-        
-        {/* Lista de miembros */}
+        <datalist id="team-form-common-roles">
+          {COMMON_TEAM_ROLES.map((role) => (
+            <option key={role} value={role} />
+          ))}
+        </datalist>
+
+        {formError && <p className="mt-2 text-sm text-danger">{formError}</p>}
+
+        <GradientButton
+          type="button"
+          variant="solid"
+          size="sm"
+          fullWidth
+          className="mt-3"
+          leadingIcon={<UserPlus size={16} />}
+          onClick={handleAddMember}
+          disabled={!newMember.name.trim() || !newMember.role.trim()}
+        >
+          Añadir miembro
+        </GradientButton>
+      </div>
+
+      <div className="mt-5">
         {teamMembers.length > 0 ? (
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="min-w-full divide-y divide-line-subtle">
+              <thead className="bg-surface-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Nombre/Cargo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Rol
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Acciones
-                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-content-muted">Nombre</th>
+                  <th scope="col" className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-content-muted">Rol</th>
+                  <th scope="col" className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-content-muted">Cargo</th>
+                  <th scope="col" className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-content-muted">Correo</th>
+                  <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-content-muted">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {teamMembers.map(member => (
+              <tbody className="divide-y divide-line-subtle bg-surface">
+                {teamMembers.map((member) => (
                   <tr key={member.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-2.5">
+                      <label htmlFor={`member-name-${member.id}`} className="sr-only">Nombre de {member.name}</label>
                       <input
+                        id={`member-name-${member.id}`}
                         type="text"
                         value={member.name}
                         onChange={(e) => handleUpdateMember(member.id, 'name', e.target.value)}
-                        className="w-full border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 text-gray-800 dark:text-gray-200"
+                        className="w-full rounded-sm border-none bg-transparent px-1 py-1 text-sm text-content focus-visible:bg-surface-sunken"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-2.5">
+                      <label htmlFor={`member-role-${member.id}`} className="sr-only">Rol de {member.name}</label>
                       <input
+                        id={`member-role-${member.id}`}
                         type="text"
                         value={member.role}
                         onChange={(e) => handleUpdateMember(member.id, 'role', e.target.value)}
-                        className="w-full border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 text-gray-800 dark:text-gray-200"
-                        list="rolesList"
+                        list="team-form-common-roles"
+                        className="w-full rounded-sm border-none bg-transparent px-1 py-1 text-sm text-content focus-visible:bg-surface-sunken"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-2.5">
+                      <label htmlFor={`member-position-${member.id}`} className="sr-only">Cargo de {member.name}</label>
                       <input
+                        id={`member-position-${member.id}`}
                         type="text"
+                        value={member.position || ''}
+                        onChange={(e) => handleUpdateMember(member.id, 'position', e.target.value)}
+                        placeholder="Sin cargo"
+                        className="w-full rounded-sm border-none bg-transparent px-1 py-1 text-sm text-content placeholder:text-content-muted focus-visible:bg-surface-sunken"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <label htmlFor={`member-email-${member.id}`} className="sr-only">Correo de {member.name}</label>
+                      <input
+                        id={`member-email-${member.id}`}
+                        type="email"
                         value={member.email || ''}
                         onChange={(e) => handleUpdateMember(member.id, 'email', e.target.value)}
-                        className="w-full border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 text-gray-800 dark:text-gray-200"
-                        placeholder="Sin email"
+                        placeholder="Sin correo"
+                        className="w-full rounded-sm border-none bg-transparent px-1 py-1 text-sm text-content placeholder:text-content-muted focus-visible:bg-surface-sunken"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMember(member.id)}
-                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                    <td className="px-4 py-2.5 text-right">
+                      {confirmRemoveId === member.id ? (
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          <span className="text-xs text-content-secondary">¿Quitar a {member.name}?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="rounded-md bg-danger px-2 py-1 text-xs font-medium text-white transition-colors duration-fast hover:bg-danger/90"
+                          >
+                            Quitar del equipo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmRemoveId(null)}
+                            className="rounded-md px-2 py-1 text-xs font-medium text-content-secondary transition-colors duration-fast hover:bg-surface-sunken"
+                          >
+                            Mantener
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveId(member.id)}
+                          aria-label={`Quitar a ${member.name} del equipo`}
+                          className="rounded-md p-1.5 text-danger transition-colors duration-fast hover:bg-danger-soft"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -266,52 +251,29 @@ const TeamMemberForm = ({ projectId, onClose, onSave }) => {
             </table>
           </div>
         ) : (
-          <div className="bg-gray-50 dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 flex flex-col items-center justify-center text-center">
-            <Users size={32} className="text-gray-400 dark:text-gray-500 mb-2" />
-            <p className="text-gray-500 dark:text-gray-400">
-              No hay miembros en el equipo
-            </p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-              Usa el formulario de arriba para añadir miembros al equipo
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            variant="sin-datos"
+            title="Aún no hay integrantes"
+            description="Añade el primer miembro con el formulario de arriba."
+          />
         )}
       </div>
-      
-      {/* Pie */}
-      <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-between">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          {teamMembers.length} miembro(s) en el equipo
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-          >
+
+      <div className="mt-6 flex items-center justify-between border-t border-line-subtle pt-4">
+        <p className="text-sm text-content-secondary">
+          {teamMembers.length} {teamMembers.length === 1 ? 'miembro' : 'miembros'} en el equipo
+        </p>
+        <div className="flex gap-3">
+          <GradientButton type="button" variant="ghost" onClick={() => onClose?.()}>
             Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {isSaving ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save size={16} className="mr-1.5" /> Guardar Cambios
-              </>
-            )}
-          </button>
+          </GradientButton>
+          <GradientButton type="button" variant="solid" loading={isSaving} onClick={handleSave}>
+            Guardar cambios
+          </GradientButton>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

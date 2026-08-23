@@ -1,603 +1,464 @@
+/**
+ * SettingsPage.jsx
+ * ---------------------------------------------------------------------------
+ * Página de configuración. Reescrita por completo para el Ciclo 2:
+ *
+ * - Se retiran las pestañas "Perfil" y "Seguridad": no tenían backend ni
+ *   persistencia real (nombre/correo fabricados, cambio de contraseña sin
+ *   autenticación, "sesiones activas" inventadas). Ningún control debe
+ *   simular algo que no ocurre.
+ * - Se retira el selector de idioma/formato/densidad/tamaño de fuente y el
+ *   botón global "Guardar cambios": ninguno tenía implementación.
+ * - Quedan tres secciones reales: Apariencia (ThemeContext), Preferencias
+ *   (persistidas con saveSettings/loadSettings) y Datos y respaldo (el
+ *   corazón del carril: exportar, restaurar, generar paquete de proyecto y
+ *   restablecer los datos de ejemplo).
+ * ---------------------------------------------------------------------------
+ */
 import { useState } from 'react';
-import { 
-  Settings, 
-  User, 
-  Moon, 
-  Sun, 
-  Bell, 
-  Lock, 
-  Globe, 
-  Save,
-  RefreshCw,
+import { Link } from 'react-router-dom';
+import {
+  Sun,
+  Moon,
+  Monitor,
   Check,
+  Download,
+  Upload,
+  RotateCcw,
+  AlertTriangle,
+  Info,
   X,
-  HelpCircle
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
+import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+import { formatNumber } from '../lib/format';
+import { exportAllProjects, exportKpiComparison } from '../utils/export';
+import storage, { saveSettings, loadSettings, removeData } from '../utils/storage';
+import pkg from '../../package.json';
+
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import GradientButton from '../components/common/GradientButton';
+import Notification from '../components/common/Notification';
+import EmptyState from '../components/common/EmptyState';
+import Modal from '../components/ui/Modal';
+import FileConnector from '../components/data/FileConnector';
+import GitHubExporter from '../components/common/GitHubExporter';
+
+const PREF_COPY = {
+  autoSave: {
+    label: 'Autoguardado',
+    description: 'Tu preferencia se guarda en este navegador y se aplicará en los formularios que la usen.',
+  },
+  showHelp: {
+    label: 'Mostrar ayuda en herramientas',
+    description: 'Tu preferencia se guarda en este navegador y se aplicará en las herramientas que la usen.',
+  },
+};
+
+/**
+ * Interruptor accesible (role="switch") sobre tokens del sistema. Solo se
+ * usa dentro de esta página.
+ * @param {Object} props
+ * @param {string} props.id
+ * @param {string} props.label
+ * @param {string} [props.description]
+ * @param {boolean} props.checked
+ * @param {() => void} props.onChange
+ */
+const PreferenceToggle = ({ id, label, description, checked, onChange }) => (
+  <div className="flex items-center justify-between gap-4 py-3">
+    <div className="min-w-0 pr-4">
+      <label htmlFor={id} className="block text-sm font-medium text-content">
+        {label}
+      </label>
+      {description && <p className="mt-0.5 text-sm text-content-secondary">{description}</p>}
+    </div>
+    <button
+      type="button"
+      id={id}
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-fast ${
+        checked ? 'bg-brand' : 'border border-line bg-surface-sunken'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-4 w-4 transform rounded-full bg-surface shadow-xs transition-transform duration-fast ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  </div>
+);
 
 const SettingsPage = () => {
-  const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('general');
-  const [isSaving, setIsSaving] = useState(false);
-  const [notificationSettings, setNotificationSettings] = useState({
-    email: true,
-    browser: false,
-    updates: true,
-    projectReminders: true
-  });
-  
-  // Función para guardar ajustes
-  const saveSettings = () => {
-    setIsSaving(true);
-    
-    // Aquí iría la lógica para guardar ajustes
-    
-    // Simulación
-    setTimeout(() => {
-      setIsSaving(false);
-    }, 1000);
+  useDocumentTitle('Configuración');
+
+  const { theme, setTheme } = useTheme();
+  const { projects, tools, getProject, addProject, updateProject } = useLeanSixSigma();
+
+  const [prefs, setPrefs] = useState(() => ({ autoSave: true, showHelp: true, ...loadSettings() }));
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [restoreResult, setRestoreResult] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
+
+  const notify = (message, type = 'success') => setNotification({ show: true, message, type });
+
+  // --- Apariencia --------------------------------------------------------
+  const handleSelectSystem = () => {
+    const prefersDark =
+      typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : false;
+    setTheme(prefersDark ? 'dark' : 'light');
+    notify('Tema sincronizado con la preferencia de tu sistema.');
   };
-  
-  // Función para cambiar configuraciones de notificaciones
-  const toggleNotification = (name) => {
-    setNotificationSettings({
-      ...notificationSettings,
-      [name]: !notificationSettings[name]
-    });
+
+  // --- Preferencias --------------------------------------------------------
+  const togglePref = (key) => {
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next);
+    saveSettings(next);
+    notify(`${PREF_COPY[key].label}: ${next[key] ? 'activado' : 'desactivado'}.`);
   };
-  
-  // Variantes para animaciones
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
+
+  // --- Exportación ---------------------------------------------------------
+  const handleExportAll = () => {
+    const ok = exportAllProjects(projects);
+    notify(ok ? 'Cartera exportada como JSON.' : 'No se pudo exportar la cartera.', ok ? 'success' : 'error');
+  };
+
+  const handleExportKpi = () => {
+    const ok = exportKpiComparison(projects);
+    notify(
+      ok ? 'Comparativo de KPIs exportado como JSON.' : 'No se pudo exportar el comparativo de KPIs.',
+      ok ? 'success' : 'error'
+    );
+  };
+
+  // --- Restauración ---------------------------------------------------------
+  const handleRestoreData = async ({ json, fileName }) => {
+    const list = Array.isArray(json) ? json : json?.projects ?? (json?.id ? [json] : []);
+
+    if (!list.length) {
+      notify('El archivo no contiene proyectos reconocibles.', 'error');
+      return;
     }
-  };
-  
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3
+
+    let imported = 0;
+    const rejected = [];
+
+    for (const item of list) {
+      if (!item || !item.id || !item.name) {
+        rejected.push(`${item?.name || item?.id || 'proyecto sin nombre'}: faltan campos obligatorios (id o nombre)`);
+        continue;
       }
+      try {
+        if (getProject(item.id)) {
+          updateProject(item.id, item);
+        } else {
+          // addProject genera el id como `project-${Date.now()}` y no
+          // conserva el id original del respaldo: un proyecto nuevo entra
+          // con un id distinto al que traía el archivo. Es una limitación
+          // conocida del contexto (fuera de este carril), no un bug de esta
+          // página.
+          addProject(item);
+        }
+        imported += 1;
+      } catch (error) {
+        rejected.push(`${item.name || item.id}: ${error.message}`);
+      }
+      // Se espacian las altas para que dos `Date.now()` seguidos no colisionen.
+      await new Promise((resolve) => setTimeout(resolve, 3));
     }
+
+    setRestoreOpen(false);
+    setRestoreResult({ imported, total: list.length, rejected, fileName });
+    notify(
+      rejected.length
+        ? `Se importaron ${imported} de ${list.length} proyectos. ${rejected.length} rechazado(s).`
+        : `Se importaron ${imported} proyecto${imported === 1 ? '' : 's'} de ${fileName}.`,
+      rejected.length ? 'warning' : 'success'
+    );
+  };
+
+  // --- Restablecer datos de ejemplo -----------------------------------------
+  const handleConfirmReset = () => {
+    removeData(storage.STORAGE_KEYS.PROJECTS);
+    removeData(storage.STORAGE_KEYS.TOOLS);
+    window.location.reload();
   };
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="container mx-auto p-4"
-    >
-      <motion.div variants={itemVariants} className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          Configuración
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Personaliza la aplicación según tus preferencias
+    <PageContainer width="narrow" gap="lg">
+      <PageHeader
+        title="Configuración"
+        description="Personaliza la aplicación y gestiona los datos guardados en este navegador."
+      />
+
+      {/* Apariencia */}
+      <section className="card p-6">
+        <p className="section-label mb-1">Apariencia</p>
+        <h2 className="text-lg font-semibold text-content">Tema</h2>
+        <p className="mt-1 text-sm text-content-secondary">
+          El tema se guarda en este navegador y se aplica al instante.
         </p>
-      </motion.div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Barra lateral */}
-        <motion.div variants={itemVariants} className="col-span-1">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-            <div className="p-4">
-              <h3 className="font-medium text-lg text-gray-800 dark:text-white mb-4">
-                Categorías
-              </h3>
-              <ul className="space-y-1">
-                <li>
-                  <button
-                    onClick={() => setActiveTab('general')}
-                    className={`flex items-center w-full px-3 py-2 rounded-lg ${
-                      activeTab === 'general'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Settings size={18} className="mr-2" />
-                    General
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => setActiveTab('profile')}
-                    className={`flex items-center w-full px-3 py-2 rounded-lg ${
-                      activeTab === 'profile'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <User size={18} className="mr-2" />
-                    Perfil
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => setActiveTab('appearance')}
-                    className={`flex items-center w-full px-3 py-2 rounded-lg ${
-                      activeTab === 'appearance'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {theme === 'dark' ? <Moon size={18} className="mr-2" /> : <Sun size={18} className="mr-2" />}
-                    Apariencia
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => setActiveTab('notifications')}
-                    className={`flex items-center w-full px-3 py-2 rounded-lg ${
-                      activeTab === 'notifications'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Bell size={18} className="mr-2" />
-                    Notificaciones
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => setActiveTab('security')}
-                    className={`flex items-center w-full px-3 py-2 rounded-lg ${
-                      activeTab === 'security'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Lock size={18} className="mr-2" />
-                    Seguridad
-                  </button>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </motion.div>
-        
-        {/* Contenido principal */}
-        <motion.div variants={itemVariants} className="col-span-1 md:col-span-3">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            {/* General */}
-            {activeTab === 'general' && (
-              <div>
-                <h2 className="text-xl font-medium text-gray-800 dark:text-white mb-6">
-                  Configuración General
-                </h2>
-                
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Idioma
-                    </label>
-                    <select className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="es">Español</option>
-                      <option value="en">English</option>
-                      <option value="fr">Français</option>
-                      <option value="pt">Português</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Formato de fecha
-                    </label>
-                    <select className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="dd/mm/yyyy">DD/MM/YYYY</option>
-                      <option value="mm/dd/yyyy">MM/DD/YYYY</option>
-                      <option value="yyyy-mm-dd">YYYY-MM-DD</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Unidad de medida
-                    </label>
-                    <div className="flex space-x-4">
-                      <label className="inline-flex items-center">
-                        <input type="radio" name="unit" className="form-radio text-blue-600" defaultChecked />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Métrico</span>
-                      </label>
-                      <label className="inline-flex items-center">
-                        <input type="radio" name="unit" className="form-radio text-blue-600" />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Imperial</span>
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Autoguardado
-                    </span>
-                    <label className="switch">
-                      <input type="checkbox" defaultChecked />
-                      <span className="w-10 h-5 bg-gray-300 dark:bg-gray-600 rounded-full relative inline-block">
-                        <span className="w-4 h-4 bg-white rounded-full absolute top-0.5 left-0.5 transform transition-transform duration-200"></span>
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Perfil */}
-            {activeTab === 'profile' && (
-              <div>
-                <h2 className="text-xl font-medium text-gray-800 dark:text-white mb-6">
-                  Perfil de Usuario
-                </h2>
-                
-                <div className="space-y-6">
-                  <div className="flex items-center">
-                    <div className="w-20 h-20 rounded-full bg-gray-300 dark:bg-gray-700 flex items-center justify-center mr-4 overflow-hidden">
-                      <User size={40} className="text-gray-600 dark:text-gray-400" />
-                    </div>
-                    <div>
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center text-sm">
-                        Cambiar foto
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Nombre
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="Usuario"
-                        className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Apellido
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="Ejemplo"
-                        className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Correo electrónico
-                    </label>
-                    <input
-                      type="email"
-                      defaultValue="usuario@ejemplo.com"
-                      className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Posición
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="Especialista Lean Six Sigma"
-                      className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Organización
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="Empresa de Consultoría"
-                      className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Apariencia */}
-            {activeTab === 'appearance' && (
-              <div>
-                <h2 className="text-xl font-medium text-gray-800 dark:text-white mb-6">
-                  Configuración de Apariencia
-                </h2>
-                
-                <div className="space-y-6">
-                  <div>
-                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-                      Tema
-                    </span>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <button
-                        onClick={() => theme !== 'light' && toggleTheme()}
-                        className={`p-4 border rounded-lg flex flex-col items-center ${
-                          theme === 'light'
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-300 dark:border-gray-700'
-                        }`}
-                      >
-                        <Sun size={24} className="text-gray-700 dark:text-gray-300 mb-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Claro</span>
-                        {theme === 'light' && <Check size={18} className="text-blue-500 mt-2" />}
-                      </button>
-                      
-                      <button
-                        onClick={() => theme !== 'dark' && toggleTheme()}
-                        className={`p-4 border rounded-lg flex flex-col items-center ${
-                          theme === 'dark'
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-300 dark:border-gray-700'
-                        }`}
-                      >
-                        <Moon size={24} className="text-gray-700 dark:text-gray-300 mb-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Oscuro</span>
-                        {theme === 'dark' && <Check size={18} className="text-blue-500 mt-2" />}
-                      </button>
-                      
-                      <button
-                        className={`p-4 border rounded-lg flex flex-col items-center border-gray-300 dark:border-gray-700`}
-                      >
-                        <Globe size={24} className="text-gray-700 dark:text-gray-300 mb-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Sistema</span>
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Tamaño de fuente
-                    </span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-700 dark:text-gray-300">A</span>
-                      <input
-                        type="range"
-                        min="1"
-                        max="5"
-                        defaultValue="3"
-                        className="flex-1"
-                      />
-                      <span className="text-xl text-gray-700 dark:text-gray-300">A</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Densidad de elementos
-                    </span>
-                    <div className="flex space-x-4">
-                      <label className="inline-flex items-center">
-                        <input type="radio" name="density" className="form-radio text-blue-600" />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Compacta</span>
-                      </label>
-                      <label className="inline-flex items-center">
-                        <input type="radio" name="density" className="form-radio text-blue-600" defaultChecked />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Normal</span>
-                      </label>
-                      <label className="inline-flex items-center">
-                        <input type="radio" name="density" className="form-radio text-blue-600" />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Espaciada</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Notificaciones */}
-            {activeTab === 'notifications' && (
-              <div>
-                <h2 className="text-xl font-medium text-gray-800 dark:text-white mb-6">
-                  Configuración de Notificaciones
-                </h2>
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 border rounded-lg border-gray-200 dark:border-gray-700">
-                    <div>
-                      <h3 className="font-medium text-gray-800 dark:text-white">Notificaciones por correo</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Recibir notificaciones por correo electrónico</p>
-                    </div>
-                    <button
-                      onClick={() => toggleNotification('email')}
-                      className="w-12 h-6 rounded-full relative transition-colors duration-200 ease-linear"
-                    >
-                      <div
-                        className={`absolute left-0 top-0 right-0 bottom-0 rounded-full transition-colors duration-200 ease-linear ${
-                          notificationSettings.email ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <div
-                          className={`absolute w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-linear ${
-                            notificationSettings.email ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                          style={{ top: '2px' }}
-                        />
-                      </div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 border rounded-lg border-gray-200 dark:border-gray-700">
-                    <div>
-                      <h3 className="font-medium text-gray-800 dark:text-white">Notificaciones del navegador</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Recibir notificaciones en el navegador</p>
-                    </div>
-                    <button
-                      onClick={() => toggleNotification('browser')}
-                      className="w-12 h-6 rounded-full relative transition-colors duration-200 ease-linear"
-                    >
-                      <div
-                        className={`absolute left-0 top-0 right-0 bottom-0 rounded-full transition-colors duration-200 ease-linear ${
-                          notificationSettings.browser ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <div
-                          className={`absolute w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-linear ${
-                            notificationSettings.browser ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                          style={{ top: '2px' }}
-                        />
-                      </div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 border rounded-lg border-gray-200 dark:border-gray-700">
-                    <div>
-                      <h3 className="font-medium text-gray-800 dark:text-white">Actualizaciones de la aplicación</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Recibir notificaciones sobre nuevas funciones</p>
-                    </div>
-                    <button
-                      onClick={() => toggleNotification('updates')}
-                      className="w-12 h-6 rounded-full relative transition-colors duration-200 ease-linear"
-                    >
-                      <div
-                        className={`absolute left-0 top-0 right-0 bottom-0 rounded-full transition-colors duration-200 ease-linear ${
-                          notificationSettings.updates ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <div
-                          className={`absolute w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-linear ${
-                            notificationSettings.updates ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                          style={{ top: '2px' }}
-                        />
-                      </div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 border rounded-lg border-gray-200 dark:border-gray-700">
-                    <div>
-                      <h3 className="font-medium text-gray-800 dark:text-white">Recordatorios de proyectos</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Recibir recordatorios de tareas pendientes</p>
-                    </div>
-                    <button
-                      onClick={() => toggleNotification('projectReminders')}
-                      className="w-12 h-6 rounded-full relative transition-colors duration-200 ease-linear"
-                    >
-                      <div
-                        className={`absolute left-0 top-0 right-0 bottom-0 rounded-full transition-colors duration-200 ease-linear ${
-                          notificationSettings.projectReminders ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <div
-                          className={`absolute w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-linear ${
-                            notificationSettings.projectReminders ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                          style={{ top: '2px' }}
-                        />
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Seguridad */}
-            {activeTab === 'security' && (
-              <div>
-                <h2 className="text-xl font-medium text-gray-800 dark:text-white mb-6">
-                  Configuración de Seguridad
-                </h2>
-                
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-base font-medium text-gray-800 dark:text-white mb-2">Cambiar contraseña</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Contraseña actual
-                        </label>
-                        <input
-                          type="password"
-                          className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Nueva contraseña
-                        </label>
-                        <input
-                          type="password"
-                          className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Confirmar nueva contraseña
-                        </label>
-                        <input
-                          type="password"
-                          className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                        Cambiar contraseña
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h3 className="text-base font-medium text-gray-800 dark:text-white mb-2">Sesiones activas</h3>
-                    <div className="space-y-3">
-                      <div className="p-3 border rounded-lg border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium text-gray-800 dark:text-white">Chrome en Windows</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Activa ahora • Heredia, Costa Rica</p>
-                        </div>
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full">
-                          Actual
-                        </span>
-                      </div>
-                      <div className="p-3 border rounded-lg border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium text-gray-800 dark:text-white">Firefox en macOS</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Hace 2 días • San José, Costa Rica</p>
-                        </div>
-                        <button className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                          Cerrar sesión
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Botón de guardar */}
-            <div className="mt-8 flex justify-end">
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            aria-pressed={theme === 'light'}
+            className={`relative flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors duration-fast ${
+              theme === 'light' ? 'border-brand bg-brand/5' : 'border-line hover:bg-surface-sunken'
+            }`}
+          >
+            {theme === 'light' && <Check size={16} className="absolute right-2 top-2 text-brand" aria-hidden="true" />}
+            <Sun size={20} className="text-content-secondary" aria-hidden="true" />
+            <span className="text-sm font-medium text-content">Claro</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            aria-pressed={theme === 'dark'}
+            className={`relative flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors duration-fast ${
+              theme === 'dark' ? 'border-brand bg-brand/5' : 'border-line hover:bg-surface-sunken'
+            }`}
+          >
+            {theme === 'dark' && <Check size={16} className="absolute right-2 top-2 text-brand" aria-hidden="true" />}
+            <Moon size={20} className="text-content-secondary" aria-hidden="true" />
+            <span className="text-sm font-medium text-content">Oscuro</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSelectSystem}
+            className="flex flex-col items-center gap-2 rounded-lg border border-line p-4 transition-colors duration-fast hover:bg-surface-sunken"
+          >
+            <Monitor size={20} className="text-content-secondary" aria-hidden="true" />
+            <span className="text-sm font-medium text-content">Sistema</span>
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-content-muted">
+          &quot;Sistema&quot; aplica ahora mismo la preferencia de tu sistema operativo. No queda sincronizado en
+          adelante: si tu sistema cambia de tema más tarde, vuelve a pulsarlo.
+        </p>
+      </section>
+
+      {/* Preferencias */}
+      <section className="card p-6">
+        <p className="section-label mb-1">Preferencias</p>
+        <h2 className="text-lg font-semibold text-content">Comportamiento</h2>
+
+        <div className="mt-2 divide-y divide-line-subtle">
+          <PreferenceToggle
+            id="pref-autosave"
+            label={PREF_COPY.autoSave.label}
+            description={PREF_COPY.autoSave.description}
+            checked={prefs.autoSave}
+            onChange={() => togglePref('autoSave')}
+          />
+          <PreferenceToggle
+            id="pref-showhelp"
+            label={PREF_COPY.showHelp.label}
+            description={PREF_COPY.showHelp.description}
+            checked={prefs.showHelp}
+            onChange={() => togglePref('showHelp')}
+          />
+        </div>
+      </section>
+
+      {/* Datos y respaldo */}
+      <section className="card border-line p-6">
+        <p className="section-label mb-1">Datos y respaldo</p>
+        <h2 className="text-lg font-semibold text-content">Tus datos</h2>
+        <p className="mt-1 text-sm text-content-secondary">
+          Todo lo que ves vive en este navegador. Si limpias el historial o cambias de equipo, se pierde — exporta
+          un respaldo de vez en cuando.
+        </p>
+        <p className="mt-2 text-sm text-content-secondary">
+          {formatNumber(projects.length)} proyecto{projects.length === 1 ? '' : 's'} y {formatNumber(tools.length)}{' '}
+          herramienta{tools.length === 1 ? '' : 's'} almacenados en este navegador.
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <GradientButton variant="outline" size="sm" leadingIcon={<Download size={16} />} onClick={handleExportAll}>
+            Exportar cartera completa (JSON)
+          </GradientButton>
+          <GradientButton variant="outline" size="sm" leadingIcon={<Download size={16} />} onClick={handleExportKpi}>
+            Exportar comparativo de KPIs (JSON)
+          </GradientButton>
+          <GradientButton variant="outline" size="sm" leadingIcon={<Upload size={16} />} onClick={() => setRestoreOpen(true)}>
+            Restaurar desde archivo
+          </GradientButton>
+        </div>
+
+        {restoreResult && (
+          <div className="mt-4 rounded-lg border border-line bg-surface-sunken p-4 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-content">
+                Se importaron <strong>{restoreResult.imported}</strong> de {restoreResult.total} proyectos de{' '}
+                <span className="text-content-secondary">{restoreResult.fileName}</span>.
+              </p>
               <button
-                onClick={saveSettings}
-                disabled={isSaving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button"
+                onClick={() => setRestoreResult(null)}
+                aria-label="Cerrar resumen de restauración"
+                className="shrink-0 rounded p-0.5 text-content-muted hover:text-content"
               >
-                {isSaving ? (
-                  <>
-                    <RefreshCw size={18} className="mr-2 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save size={18} className="mr-2" />
-                    Guardar cambios
-                  </>
-                )}
+                <X size={16} />
               </button>
             </div>
+            {restoreResult.rejected.length > 0 && (
+              <ul className="mt-2 list-inside list-disc space-y-1 text-danger-on">
+                {restoreResult.rejected.map((reason, index) => (
+                  <li key={index}>{reason}</li>
+                ))}
+              </ul>
+            )}
           </div>
-        </motion.div>
-      </div>
-    </motion.div>
+        )}
+
+        <div className="mt-6 border-t border-line-subtle pt-6">
+          <h3 className="text-sm font-semibold text-content">Exportar paquete de proyecto</h3>
+          <p className="mt-1 text-sm text-content-secondary">
+            Genera los archivos de un proyecto (JSON, README y flujo de CI/CD) para que los subas tú a tu propio
+            repositorio.
+          </p>
+
+          {projects.length === 0 ? (
+            <EmptyState
+              className="mt-4"
+              size="sm"
+              variant="sin-datos"
+              title="No hay proyectos que exportar"
+              description="Crea un proyecto primero para poder generar su paquete."
+            />
+          ) : (
+            <>
+              <div className="mt-4 max-w-xs">
+                <label htmlFor="package-project" className="mb-1 block text-sm font-medium text-content">
+                  Proyecto
+                </label>
+                <select
+                  id="package-project"
+                  className="input"
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(event.target.value)}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedProjectId && <GitHubExporter projectId={selectedProjectId} className="mt-4" />}
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Zona de riesgo */}
+      <section className="card border-danger/40 p-6">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-full bg-danger-soft p-2 text-danger-on">
+            <AlertTriangle size={18} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-content">Restablecer datos de ejemplo</h2>
+            <p className="mt-1 text-sm text-content-secondary">
+              Borra los proyectos y herramientas guardados en este navegador y los reemplaza por los datos de
+              ejemplo originales. Si quieres conservar tus proyectos actuales, expórtalos primero.
+            </p>
+            <GradientButton
+              className="mt-4"
+              variant="danger"
+              size="sm"
+              leadingIcon={<RotateCcw size={16} />}
+              onClick={() => setResetOpen(true)}
+            >
+              Restablecer datos de ejemplo
+            </GradientButton>
+          </div>
+        </div>
+      </section>
+
+      {/* Acerca de */}
+      <section className="card p-6">
+        <p className="section-label mb-1">Acerca de</p>
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-full bg-surface-sunken p-2 text-content-secondary">
+            <Info size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-content">JC Analytic</h2>
+            <p className="mt-1 text-sm text-content-secondary">
+              Versión {pkg.version} · {formatNumber(tools.length)} herramientas disponibles
+            </p>
+            <Link
+              to="/methodology"
+              className="mt-2 inline-flex items-center gap-1 rounded text-sm font-medium text-brand transition-colors duration-fast hover:text-brand-hover"
+            >
+              Ver la metodología DMAIC
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Modal: restaurar desde archivo */}
+      <Modal open={restoreOpen} onClose={() => setRestoreOpen(false)} size="lg">
+        <FileConnector
+          accept={['json']}
+          maxSizeMb={10}
+          title="Restaurar respaldo"
+          description="El archivo se lee en tu equipo. Nada se sube a ningún servidor."
+          onData={handleRestoreData}
+          onCancel={() => setRestoreOpen(false)}
+        />
+      </Modal>
+
+      {/* Modal: confirmar restablecimiento */}
+      <Modal
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        title="Restablecer los datos de ejemplo"
+        description="Esta acción reemplaza lo que hay guardado en este navegador."
+        footer={
+          <>
+            <GradientButton variant="ghost" onClick={() => setResetOpen(false)}>
+              Conservar mis datos
+            </GradientButton>
+            <GradientButton variant="danger" onClick={handleConfirmReset}>
+              Restablecer datos de ejemplo
+            </GradientButton>
+          </>
+        }
+      >
+        <p className="text-sm text-content-secondary">
+          Se borrarán los {formatNumber(projects.length)} proyectos guardados en este navegador y se reemplazarán
+          por los datos de ejemplo originales. Esta acción no se puede deshacer. Si quieres conservar tus proyectos
+          actuales, cierra esta ventana y usa &quot;Exportar cartera completa&quot; primero.
+        </p>
+      </Modal>
+
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        show={notification.show}
+        onClose={() => setNotification((prev) => ({ ...prev, show: false }))}
+        duration={4000}
+      />
+    </PageContainer>
   );
 };
 

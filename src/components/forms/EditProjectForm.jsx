@@ -1,538 +1,420 @@
-import { useState, useEffect } from 'react';
-import { 
-  Save, 
-  X, 
-  Calendar, 
-  Building, 
-  Users, 
-  ChevronDown, 
-  Plus, 
-  Trash2,
-  RefreshCw
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { useLeanSixSigma } from '../../contexts/LeanSixSigmaContext';
+import { PHASE_ORDER, formatPhase, normalizePhase, PROJECT_STATUS } from '../../lib/phases';
+import GradientButton from '../common/GradientButton';
+import Notification from '../common/Notification';
+import { SkeletonText } from '../common/Skeleton';
+import { PROJECT_FORM_RULES, COMMON_TEAM_ROLES } from './NewProjectForm';
+
+const EMPTY_MEMBER = { id: '', name: '', role: '', position: '', email: '' };
 
 /**
- * Formulario para editar un proyecto existente
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto a editar
- * @param {Function} props.onCancel - Función a llamar al cancelar
- * @param {Function} props.onSave - Función a llamar después de guardar
+ * Avance del proyecto derivado de su plan de herramientas (fórmula 0.4.1).
+ * Nunca se expone como campo editable: se recalcula al guardar para que
+ * `project.progress` (que HomePage lee directo) no quede desincronizado.
  */
-const VALIDATION_RULES = {
-  NAME_MAX_LENGTH: 100,
-  DESCRIPTION_MAX_LENGTH: 500,
-  COMPANY_MAX_LENGTH: 100,
-  MAX_TAGS: 10,
-  TAG_MAX_LENGTH: 30
-};
+function derivedProgress(project) {
+  const planned = Object.keys(project?.tools || {});
+  const done = planned.filter((id) => project.tools[id].status === 'completed').length;
+  return planned.length ? Math.round((done / planned.length) * 100) : 0;
+}
 
+/**
+ * Formulario de edición de proyecto. Vive dentro de un `<Modal size="lg">`
+ * montado por ProjectDetailsPage: no controla su propia apertura/cierre, no
+ * lleva cabecera ni ancho propios (los pone el Modal).
+ *
+ * @param {Object} props
+ * @param {string} props.projectId - ID del proyecto a editar.
+ * @param {Function} [props.onCancel] - Se llama al cancelar.
+ * @param {Function} [props.onSave] - Se llama tras guardar con éxito.
+ */
 const EditProjectForm = ({ projectId, onCancel, onSave }) => {
   const { getProject, updateProject } = useLeanSixSigma();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errors, setErrors] = useState({});
-  
-  // Estado del formulario
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    status: 'active',
-    startDate: '',
-    endDate: '',
-    company: '',
-    team: [],
-    phase: 'Define'
-  });
-  
-  // Estado para nuevo miembro del equipo
-  const [teamMember, setTeamMember] = useState({
-    name: '',
-    role: ''
-  });
-  
-  // Cargar datos del proyecto
-  useEffect(() => {
-    const project = getProject(projectId);
-    
-    if (project) {
-      // Formatear fechas para el formato de input date
-      const formattedStartDate = project.startDate ? project.startDate.split('T')[0] : '';
-      const formattedEndDate = project.endDate ? project.endDate.split('T')[0] : '';
-      
-      setFormData({
-        name: project.name || '',
-        description: project.description || '',
-        status: project.status || 'active',
-        startDate: formattedStartDate,
-        endDate: formattedEndDate,
-        company: project.company || '',
-        team: project.team || [],
-        phase: project.phase || 'Define'
-      });
-    }
-    
-    setIsLoading(false);
-  }, [projectId, getProject]);
-  
-  // Función para manejar cambios en los inputs del formulario
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    // Limpiar error cuando se modifica un campo
-    if (errors[name]) {
-      setErrors({
-        ...errors,
-        [name]: ''
-      });
-    }
-  };
-  
-  // Validación de miembro del equipo antes de añadir
-  const validateTeamMember = (member) => {
-    if (!member.name.trim()) {
-      return 'El nombre del miembro es requerido';
-    }
-    if (!member.role.trim()) {
-      return 'El rol del miembro es requerido';
-    }
-    return null;
-  };
-  
-  // Función para añadir un miembro al equipo
-  const addTeamMember = () => {
-    const validationError = validateTeamMember(teamMember);
-    if (validationError) {
-      setErrors(prev => ({
-        ...prev,
-        teamMember: validationError
-      }));
-      return;
-    }
-    
-    const newMember = {
-      id: `team-${Date.now()}`,
-      name: teamMember.name.trim(),
-      role: teamMember.role.trim()
-    };
-    
-    setFormData({
-      ...formData,
-      team: [...formData.team, newMember]
-    });
-    
-    setTeamMember({
+  const project = getProject(projectId);
+  const [submitError, setSubmitError] = useState('');
+  const [notice, setNotice] = useState({ show: false, message: '' });
+  const [closing, setClosing] = useState(false);
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    reset,
+    formState: { errors, isSubmitting, isSubmitted },
+  } = useForm({
+    mode: 'onBlur',
+    defaultValues: {
       name: '',
-      role: ''
+      description: '',
+      company: '',
+      status: 'active',
+      phase: 'Define',
+      startDate: '',
+      endDate: '',
+      team: [EMPTY_MEMBER],
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({ control, name: 'team' });
+
+  // Precarga el formulario en cuanto el proyecto resuelve del contexto.
+  useEffect(() => {
+    if (!project) return;
+    reset({
+      name: project.name || '',
+      description: project.description || '',
+      company: project.company || '',
+      status: project.status || 'active',
+      phase: normalizePhase(project.phase) || 'Define',
+      startDate: project.startDate ? String(project.startDate).split('T')[0] : '',
+      endDate: project.endDate ? String(project.endDate).split('T')[0] : '',
+      team:
+        project.team && project.team.length > 0
+          ? project.team.map((m) => ({
+              id: m.id || '',
+              name: m.name || '',
+              role: m.role || '',
+              position: m.position || '',
+              email: m.email || '',
+            }))
+          : [EMPTY_MEMBER],
     });
-    
-    // Limpiar error si existe
-    if (errors.teamMember) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors.teamMember;
-        return newErrors;
-      });
-    }
-  };
-  
-  // Función para eliminar un miembro del equipo
-  const removeTeamMember = (id) => {
-    setFormData({
-      ...formData,
-      team: formData.team.filter(member => member.id !== id)
-    });
-  };
-  
-  // Función para validar el formulario
-  const validateForm = () => {
-    const newErrors = {};
-    
-    // Validación del nombre
-    if (!formData.name.trim()) {
-      newErrors.name = 'El nombre del proyecto es requerido';
-    } else if (formData.name.length > VALIDATION_RULES.NAME_MAX_LENGTH) {
-      newErrors.name = `El nombre no puede exceder ${VALIDATION_RULES.NAME_MAX_LENGTH} caracteres`;
-    }
-    
-    // Validación de la descripción
-    if (!formData.description.trim()) {
-      newErrors.description = 'La descripción es requerida';
-    } else if (formData.description.length > VALIDATION_RULES.DESCRIPTION_MAX_LENGTH) {
-      newErrors.description = `La descripción no puede exceder ${VALIDATION_RULES.DESCRIPTION_MAX_LENGTH} caracteres`;
-    }
-    
-    // Validación de la categoría si existe en el modelo de datos
-    if (formData.category !== undefined) {
-      if (!formData.category) {
-        newErrors.category = 'La categoría es requerida';
-      } else if (!PROJECT_CATEGORIES.includes(formData.category)) {
-        newErrors.category = 'Selecciona una categoría válida';
-      }
-    }
-    
-    // Validación de etiquetas si existen en el modelo de datos
-    if (formData.tags) {
-      if (formData.tags.length > VALIDATION_RULES.MAX_TAGS) {
-        newErrors.tags = `No puedes agregar más de ${VALIDATION_RULES.MAX_TAGS} etiquetas`;
-      }
-      if (formData.tags.some(tag => tag.length > VALIDATION_RULES.TAG_MAX_LENGTH)) {
-        newErrors.tags = `Cada etiqueta no puede exceder ${VALIDATION_RULES.TAG_MAX_LENGTH} caracteres`;
-      }
-    }
-    
-    // Validación de fechas
-    if (!formData.startDate) {
-      newErrors.startDate = 'La fecha de inicio es requerida';
-    }
-    if (formData.endDate && formData.startDate && new Date(formData.endDate) <= new Date(formData.startDate)) {
-      newErrors.endDate = 'La fecha de fin debe ser posterior a la fecha de inicio';
-    }
-    
-    // Validación de la empresa
-    if (!formData.company.trim()) {
-      newErrors.company = 'La empresa es requerida';
-    } else if (formData.company.length > VALIDATION_RULES.COMPANY_MAX_LENGTH) {
-      newErrors.company = `El nombre de la empresa no puede exceder ${VALIDATION_RULES.COMPANY_MAX_LENGTH} caracteres`;
-    }
-    
-    // Validación del equipo
-    formData.team.forEach((member, index) => {
-      if (!member.name.trim() || !member.role.trim()) {
-        newErrors[`team_${index}`] = 'Nombre y rol son requeridos para cada miembro del equipo';
-      }
-    });
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-  
-  // Función para enviar el formulario
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
-    setIsSaving(true);
-    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
+  const startDate = watch('startDate');
+  const descriptionValue = watch('description') || '';
+  const errorList = Object.values(errors);
+
+  const onSubmit = async (data) => {
+    setSubmitError('');
+
+    const team = data.team.map((member, i) => ({
+      id: member.id || `team-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      name: member.name.trim(),
+      role: member.role.trim(),
+      position: member.position?.trim() || '',
+      email: member.email?.trim() || '',
+    }));
+
     try {
-      // Actualizar proyecto
       updateProject(projectId, {
-        ...formData,
-        updatedAt: new Date().toISOString()
+        name: data.name.trim(),
+        description: data.description.trim(),
+        status: data.status,
+        phase: data.phase,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        company: data.company.trim(),
+        team,
+        progress: derivedProgress(project),
       });
-      
-      // Notificar que se ha guardado correctamente
-      setTimeout(() => {
-        setIsSaving(false);
-        if (onSave) onSave();
-      }, 800);
+      setNotice({ show: true, message: 'Cambios guardados' });
+      setClosing(true);
+      window.setTimeout(() => onSave?.(), 700);
     } catch (error) {
-      console.error('Error al actualizar proyecto:', error);
-      setIsSaving(false);
+      console.error('[EditProjectForm] error al actualizar proyecto', error);
+      setSubmitError('No se pudieron guardar los cambios. Intenta de nuevo.');
     }
   };
-  
-  // Si está cargando, mostrar spinner
-  if (isLoading) {
+
+  if (!project) {
     return (
-      <div className="flex justify-center items-center p-8">
-        <RefreshCw size={24} className="text-blue-600 animate-spin" />
+      <div role="status" aria-busy="true" className="p-2">
+        <span className="sr-only">Cargando…</span>
+        <SkeletonText lines={4} />
       </div>
     );
   }
-  
+
+  const busy = isSubmitting || closing;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden"
-    >
-      <form onSubmit={handleSubmit}>
-        {/* Cabecera del formulario */}
-        <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-            Editar Proyecto
-          </h2>
-          <div className="flex space-x-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md flex items-center text-sm hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
-            >
-              <X size={16} className="mr-1.5" /> Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-md flex items-center text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save size={16} className="mr-1.5" /> Guardar Cambios
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-        
-        {/* Contenido del formulario */}
-        <div className="p-6 grid grid-cols-1 gap-6">
-          {/* Información básica */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">
-              Información Básica
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Nombre del Proyecto <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={`w-full border ${errors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                  placeholder="Nombre del proyecto"
-                />
-                {errors.name && (
-                  <p className="mt-1 text-sm text-red-500">{errors.name}</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Empresa <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="company"
-                    value={formData.company}
-                    onChange={handleChange}
-                    className={`w-full border ${errors.company ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md pl-10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                    placeholder="Nombre de la empresa"
-                  />
-                  <Building className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                </div>
-                {errors.company && (
-                  <p className="mt-1 text-sm text-red-500">{errors.company}</p>
-                )}
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Descripción <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows="4"
-                  className={`w-full border ${errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                  placeholder="Describe el objetivo y alcance del proyecto..."
-                ></textarea>
-                {errors.description && (
-                  <p className="mt-1 text-sm text-red-500">{errors.description}</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Fecha de Inicio <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleChange}
-                    className={`w-full border ${errors.startDate ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md pl-10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                  />
-                  <Calendar className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                </div>
-                {errors.startDate && (
-                  <p className="mt-1 text-sm text-red-500">{errors.startDate}</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Fecha de Fin Estimada
-                </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md pl-10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
-                  <Calendar className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Estado
-                </label>
-                <div className="relative">
-                  <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="active">Activo</option>
-                    <option value="planning">Planificación</option>
-                    <option value="on_hold">En Espera</option>
-                    <option value="completed">Completado</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-2.5 text-gray-400" size={18} />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Fase DMAIC
-                </label>
-                <div className="relative">
-                  <select
-                    name="phase"
-                    value={formData.phase}
-                    onChange={handleChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="Define">Define</option>
-                    <option value="Measure">Measure</option>
-                    <option value="Analyze">Analyze</option>
-                    <option value="Improve">Improve</option>
-                    <option value="Control">Control</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-2.5 text-gray-400" size={18} />
-                </div>
-              </div>
+    <div>
+      <Notification
+        message={notice.message}
+        type="success"
+        show={notice.show}
+        onClose={() => setNotice({ show: false, message: '' })}
+        duration={1500}
+      />
+
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        {isSubmitted && errorList.length > 0 && (
+          <div className="mb-6 flex items-start gap-3 rounded-lg border border-danger/30 bg-danger-soft p-4 text-sm text-danger-on">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">Revisa estos campos antes de continuar:</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {errorList.map((err, i) => (
+                  <li key={i}>{typeof err?.message === 'string' ? err.message : 'Hay un error en un miembro del equipo.'}</li>
+                ))}
+              </ul>
             </div>
           </div>
-          
-          {/* Equipo */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">
-              Equipo del Proyecto
-            </h3>
-            
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <input
-                  type="text"
-                  value={teamMember.name}
-                  onChange={(e) => setTeamMember({...teamMember, name: e.target.value})}
-                  placeholder="Nombre o Cargo"
-                  className={`border ${errors.teamMember ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                />
-                <input
-                  type="text"
-                  value={teamMember.role}
-                  onChange={(e) => setTeamMember({...teamMember, role: e.target.value})}
-                  placeholder="Rol en el Proyecto"
-                  className={`border ${errors.teamMember ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white`}
-                />
-              </div>
-              {errors.teamMember && (
-                <p className="mt-1 mb-3 text-sm text-red-500">{errors.teamMember}</p>
-              )}
-              <button
-                type="button"
-                onClick={addTeamMember}
-                disabled={!teamMember.name.trim() || !teamMember.role.trim()}
-                className="w-full px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md flex justify-center items-center text-sm hover:bg-blue-100 dark:hover:bg-blue-800/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus size={16} className="mr-1.5" /> Añadir Miembro
-              </button>
+        )}
+
+        {submitError && (
+          <div className="mb-6 rounded-lg border border-danger/30 bg-danger-soft p-4 text-sm text-danger-on">
+            {submitError}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="edit-name" className="mb-1 block text-sm font-medium text-content-secondary">
+                Nombre del proyecto <span className="text-danger">*</span>
+              </label>
+              <input
+                id="edit-name"
+                type="text"
+                className="input"
+                aria-invalid={errors.name ? 'true' : 'false'}
+                aria-describedby={errors.name ? 'edit-name-error' : undefined}
+                {...register('name', {
+                  required: 'El proyecto necesita un nombre',
+                  maxLength: {
+                    value: PROJECT_FORM_RULES.NAME_MAX_LENGTH,
+                    message: `El nombre no puede exceder ${PROJECT_FORM_RULES.NAME_MAX_LENGTH} caracteres`,
+                  },
+                })}
+              />
+              {errors.name && <p id="edit-name-error" className="mt-1 text-sm text-danger">{errors.name.message}</p>}
             </div>
 
-            {formData.team.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Nombre/Cargo
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Rol
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {formData.team.map(member => (
-                      <tr key={member.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200">
-                          {member.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200">
-                          {member.role}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            type="button"
-                            onClick={() => removeTeamMember(member.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {Object.keys(errors).some(key => key.startsWith('team_')) && (
-                  <div className="p-4 bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800">
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      Hay errores en algunos miembros del equipo. Por favor verifica que todos tengan nombre y rol.
-                    </p>
+            <div>
+              <label htmlFor="edit-company" className="mb-1 block text-sm font-medium text-content-secondary">
+                Empresa <span className="text-danger">*</span>
+              </label>
+              <input
+                id="edit-company"
+                type="text"
+                className="input"
+                aria-invalid={errors.company ? 'true' : 'false'}
+                aria-describedby={errors.company ? 'edit-company-error' : undefined}
+                {...register('company', {
+                  required: 'Indica la empresa para poder agrupar tus proyectos',
+                  maxLength: {
+                    value: PROJECT_FORM_RULES.COMPANY_MAX_LENGTH,
+                    message: `La empresa no puede exceder ${PROJECT_FORM_RULES.COMPANY_MAX_LENGTH} caracteres`,
+                  },
+                })}
+              />
+              {errors.company && (
+                <p id="edit-company-error" className="mt-1 text-sm text-danger">{errors.company.message}</p>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <div className="mb-1 flex items-baseline justify-between">
+                <label htmlFor="edit-description" className="block text-sm font-medium text-content-secondary">
+                  Descripción <span className="text-danger">*</span>
+                </label>
+                <span className="text-xs text-content-muted">
+                  {descriptionValue.length}/{PROJECT_FORM_RULES.DESCRIPTION_MAX_LENGTH}
+                </span>
+              </div>
+              <textarea
+                id="edit-description"
+                rows={4}
+                className="input"
+                aria-invalid={errors.description ? 'true' : 'false'}
+                aria-describedby={errors.description ? 'edit-description-error' : undefined}
+                {...register('description', {
+                  required: 'Describe el objetivo del proyecto',
+                  maxLength: {
+                    value: PROJECT_FORM_RULES.DESCRIPTION_MAX_LENGTH,
+                    message: `La descripción no puede exceder ${PROJECT_FORM_RULES.DESCRIPTION_MAX_LENGTH} caracteres`,
+                  },
+                })}
+              />
+              {errors.description && (
+                <p id="edit-description-error" className="mt-1 text-sm text-danger">{errors.description.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="edit-status" className="mb-1 block text-sm font-medium text-content-secondary">
+                Estado
+              </label>
+              <select id="edit-status" className="input" {...register('status')}>
+                {Object.entries(PROJECT_STATUS).map(([key, meta]) => (
+                  <option key={key} value={key}>{meta.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="edit-phase" className="mb-1 block text-sm font-medium text-content-secondary">
+                Fase DMAIC
+              </label>
+              <select id="edit-phase" className="input" {...register('phase')}>
+                {PHASE_ORDER.map((phase) => (
+                  <option key={phase} value={phase}>{formatPhase(phase)}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="edit-startDate" className="mb-1 block text-sm font-medium text-content-secondary">
+                Fecha de inicio <span className="text-danger">*</span>
+              </label>
+              <input
+                id="edit-startDate"
+                type="date"
+                className="input"
+                aria-invalid={errors.startDate ? 'true' : 'false'}
+                aria-describedby={errors.startDate ? 'edit-startDate-error' : undefined}
+                {...register('startDate', { required: 'La fecha de inicio es requerida' })}
+              />
+              {errors.startDate && (
+                <p id="edit-startDate-error" className="mt-1 text-sm text-danger">{errors.startDate.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="edit-endDate" className="mb-1 block text-sm font-medium text-content-secondary">
+                Fecha de fin <span className="text-danger">*</span>
+              </label>
+              <input
+                id="edit-endDate"
+                type="date"
+                className="input"
+                aria-invalid={errors.endDate ? 'true' : 'false'}
+                aria-describedby={errors.endDate ? 'edit-endDate-error' : undefined}
+                {...register('endDate', {
+                  required: 'La fecha de fin es requerida',
+                  validate: (value) =>
+                    !startDate || !value || value >= startDate || 'La fecha de fin no puede ser anterior al inicio',
+                })}
+              />
+              {errors.endDate && (
+                <p id="edit-endDate-error" className="mt-1 text-sm text-danger">{errors.endDate.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-content">Equipo del proyecto</h3>
+              <GradientButton
+                type="button"
+                variant="outline"
+                size="sm"
+                leadingIcon={<Plus size={14} />}
+                onClick={() => append(EMPTY_MEMBER)}
+              >
+                Añadir miembro
+              </GradientButton>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {fields.map((field, index) => (
+                <div key={field.id} className="rounded-lg border border-line bg-surface-sunken/40 p-4">
+                  <input type="hidden" {...register(`team.${index}.id`)} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <label htmlFor={`edit-team.${index}.name`} className="mb-1 block text-xs font-medium text-content-secondary">
+                        Nombre <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        id={`edit-team.${index}.name`}
+                        type="text"
+                        className="input"
+                        aria-invalid={errors.team?.[index]?.name ? 'true' : 'false'}
+                        {...register(`team.${index}.name`, { required: 'Falta el nombre de este integrante' })}
+                      />
+                      {errors.team?.[index]?.name && (
+                        <p className="mt-1 text-xs text-danger">{errors.team[index].name.message}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor={`edit-team.${index}.role`} className="mb-1 block text-xs font-medium text-content-secondary">
+                        Rol <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        id={`edit-team.${index}.role`}
+                        type="text"
+                        className="input"
+                        list="edit-project-common-roles"
+                        aria-invalid={errors.team?.[index]?.role ? 'true' : 'false'}
+                        {...register(`team.${index}.role`, { required: 'Falta el rol de este integrante' })}
+                      />
+                      {errors.team?.[index]?.role && (
+                        <p className="mt-1 text-xs text-danger">{errors.team[index].role.message}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor={`edit-team.${index}.position`} className="mb-1 block text-xs font-medium text-content-secondary">
+                        Cargo
+                      </label>
+                      <input
+                        id={`edit-team.${index}.position`}
+                        type="text"
+                        className="input"
+                        {...register(`team.${index}.position`)}
+                      />
+                    </div>
+
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label htmlFor={`edit-team.${index}.email`} className="mb-1 block text-xs font-medium text-content-secondary">
+                          Correo
+                        </label>
+                        <input
+                          id={`edit-team.${index}.email`}
+                          type="email"
+                          className="input"
+                          aria-invalid={errors.team?.[index]?.email ? 'true' : 'false'}
+                          {...register(`team.${index}.email`, {
+                            pattern: { value: PROJECT_FORM_RULES.EMAIL_PATTERN, message: 'Ese correo no parece válido' },
+                          })}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => remove(index)}
+                        disabled={fields.length <= 1}
+                        aria-label="Quitar integrante"
+                        className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-danger transition-colors duration-fast hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    {errors.team?.[index]?.email && (
+                      <p className="-mt-2 text-xs text-danger sm:col-span-2 lg:col-span-4">
+                        {errors.team[index].email.message}
+                      </p>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-            
-            {formData.team.length === 0 && (
-              <div className="bg-gray-50 dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 flex flex-col items-center justify-center text-center">
-                <Users size={32} className="text-gray-400 dark:text-gray-500 mb-2" />
-                <p className="text-gray-500 dark:text-gray-400">
-                  Aún no hay miembros en el equipo
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
-                  Puedes añadir a los integrantes del equipo usando el formulario de arriba
-                </p>
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
+            <datalist id="edit-project-common-roles">
+              {COMMON_TEAM_ROLES.map((role) => (
+                <option key={role} value={role} />
+              ))}
+            </datalist>
           </div>
         </div>
+
+        <div className="mt-8 flex items-center justify-end gap-3 border-t border-line-subtle pt-6">
+          <GradientButton type="button" variant="ghost" onClick={() => onCancel?.()} disabled={busy}>
+            Cancelar
+          </GradientButton>
+          <GradientButton type="submit" variant="solid" loading={busy} disabled={busy}>
+            {busy ? 'Guardando…' : 'Guardar cambios'}
+          </GradientButton>
+        </div>
       </form>
-    </motion.div>
+    </div>
   );
 };
 

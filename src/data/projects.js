@@ -5,9 +5,9 @@ const projects = [
     name: 'Diagnóstico de Cobranza e Inventario FGV S.A.',
     description: 'Aplicación de Lean Six Sigma para diagnóstico de procesos de cobranza e inventario con énfasis en reducción de tiempos de ciclo y aumento de la eficiencia operativa.',
     status: 'active',
-    progress: 75,
-    startDate: '2025-01-15',
-    endDate: '2025-04-15',
+    progress: 54,
+    startDate: '2026-02-16',
+    endDate: '2026-08-07',
     company: 'Ferreteros Globales Versátiles S.A.',
     phase: 'Improve',
     team: [
@@ -22,9 +22,9 @@ const projects = [
       { id: 'kpi-3', name: 'Cuentas por Cobrar Vencidas', baseLine: '23%', target: '10%', current: '14%' }
     ],
     tools: {
-      'project-charter': { 
-        status: 'completed', 
-        updatedAt: '2025-01-20T10:30:00Z',
+      'project-charter': {
+        status: 'completed',
+        updatedAt: '2026-02-21T10:30:00Z',
         notes: 'Proyecto charter finalizado y aprobado por el patrocinador',
         data: {
           businessCase: 'La empresa enfrenta problemas recurrentes en la gestión de cobranza e inventarios que afectan el flujo de caja y la satisfacción del cliente. Se estima que las ineficiencias actuales generan costos adicionales de aproximadamente ₡12.5 millones al año.',
@@ -33,9 +33,9 @@ const projects = [
           goals: 'Reducir el tiempo de ciclo de cobranza a 30 días o menos y aumentar la exactitud del inventario a un mínimo de 98%.'
         }
       },
-      'sipoc': { 
-        status: 'completed', 
-        updatedAt: '2025-01-25T14:45:00Z',
+      'sipoc': {
+        status: 'completed',
+        updatedAt: '2026-02-26T14:45:00Z',
         notes: 'SIPOCs completados para todos los procesos críticos',
         data: {
           processName: 'Gestión de Cobranza',
@@ -46,9 +46,9 @@ const projects = [
           customers: ['Departamento Financiero', 'Gerencia General', 'Departamento de Ventas']
         }
       },
-      'voc': { 
-        status: 'completed', 
-        updatedAt: '2025-02-10T09:15:00Z',
+      'voc': {
+        status: 'completed',
+        updatedAt: '2026-03-14T09:15:00Z',
         notes: 'Análisis VOC completado con todos los grupos de stakeholders',
         data: {
           customers: [
@@ -58,9 +58,9 @@ const projects = [
           ]
         }
       },
-      'ctq': { 
-        status: 'completed', 
-        updatedAt: '2025-02-28T16:20:00Z',
+      'ctq': {
+        status: 'completed',
+        updatedAt: '2026-04-01T16:20:00Z',
         notes: 'Indicadores CTQ definidos y validados con stakeholders',
         data: {
           requirements: [
@@ -70,9 +70,9 @@ const projects = [
           ]
         }
       },
-      'value-stream-map': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-05T11:00:00Z',
+      'value-stream-map': {
+        status: 'in_progress',
+        updatedAt: '2026-05-15T11:00:00Z',
         notes: 'VSM en proceso de validación final',
         data: {
           currentState: {
@@ -86,9 +86,9 @@ const projects = [
           }
         }
       },
-      'stakeholder-analysis': { 
-        status: 'completed', 
-        updatedAt: '2025-02-05T15:30:00Z',
+      'stakeholder-analysis': {
+        status: 'completed',
+        updatedAt: '2026-03-09T15:30:00Z',
         notes: 'Análisis de stakeholders finalizado',
         data: {
           stakeholders: [
@@ -100,7 +100,7 @@ const projects = [
       },
       'cause-effect-diagram': {
         status: 'completed',
-        updatedAt: '2025-02-15T13:25:00Z',
+        updatedAt: '2026-03-19T13:25:00Z',
         notes: 'Diagrama de Ishikawa completado para problemas de cobranza e inventario',
         data: {
           problem: 'Ciclo de cobranza extendido',
@@ -112,9 +112,9 @@ const projects = [
           ]
         }
       },
-      'prioritization-matrix': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-10T13:45:00Z',
+      'prioritization-matrix': {
+        status: 'in_progress',
+        updatedAt: '2026-06-10T13:45:00Z',
         notes: 'Matriz de priorización en desarrollo',
         data: {
           criteria: ['Impacto en flujo de caja', 'Facilidad de implementación', 'Costo', 'Tiempo requerido'],
@@ -125,9 +125,9 @@ const projects = [
           ]
         }
       },
-      'roi-calculator': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-12T09:30:00Z',
+      'roi-calculator': {
+        status: 'in_progress',
+        updatedAt: '2026-06-15T09:30:00Z',
         notes: 'Análisis de ROI preliminar completado, pendiente validación final',
         data: {
           fte: {
@@ -158,31 +158,31 @@ const projects = [
             moneySaved: 8640000,
             roi: 307.55,
             paybackMonths: 3.9,
-            lastUpdated: '2025-03-12T09:30:00Z'
+            lastUpdated: '2026-06-15T09:30:00Z'
           }
         }
       },
-      'project-timeline': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-14T15:45:00Z',
+      'project-timeline': {
+        status: 'in_progress',
+        updatedAt: '2026-06-20T15:45:00Z',
         notes: 'Línea de tiempo inicial creada, falta agregar detalles de implementación',
         data: {
           phases: [
-            { name: 'Define', start: '2025-01-15', end: '2025-01-30', complete: 100 },
-            { name: 'Measure', start: '2025-02-01', end: '2025-02-28', complete: 100 },
-            { name: 'Analyze', start: '2025-03-01', end: '2025-03-15', complete: 90 },
-            { name: 'Improve', start: '2025-03-16', end: '2025-04-05', complete: 20 },
-            { name: 'Control', start: '2025-04-06', end: '2025-04-15', complete: 0 }
+            { name: 'Define', start: '2026-02-16', end: '2026-03-15', complete: 100 },
+            { name: 'Measure', start: '2026-03-16', end: '2026-04-15', complete: 100 },
+            { name: 'Analyze', start: '2026-04-16', end: '2026-05-31', complete: 90 },
+            { name: 'Improve', start: '2026-06-01', end: '2026-07-15', complete: 35 },
+            { name: 'Control', start: '2026-07-16', end: '2026-08-07', complete: 0 }
           ],
           tasks: [
-            { id: 't1', name: 'Diseño de nuevo proceso de cobranza', start: '2025-03-16', end: '2025-03-25', dependencies: [], complete: 40, resources: ['María Ramírez', 'Juan Pérez'] },
-            { id: 't2', name: 'Implementación de sistema de códigos de barras', start: '2025-03-20', end: '2025-04-05', dependencies: [], complete: 10, resources: ['Laura González'] }
+            { id: 't1', name: 'Diseño de nuevo proceso de cobranza', start: '2026-06-01', end: '2026-06-15', dependencies: [], complete: 40, resources: ['María Ramírez', 'Juan Pérez'] },
+            { id: 't2', name: 'Implementación de sistema de códigos de barras', start: '2026-06-10', end: '2026-07-10', dependencies: [], complete: 10, resources: ['Laura González'] }
           ]
         }
       },
       'pareto-chart': {
         status: 'completed',
-        updatedAt: '2025-02-20T10:15:00Z',
+        updatedAt: '2026-03-24T10:15:00Z',
         notes: 'Análisis de Pareto finalizado para causas de retrasos en cobranza',
         data: {
           categories: ['Facturas con errores', 'Retrasos en aprobaciones', 'Información de cliente incorrecta', 'Problemas de comunicación interna', 'Problemas sistema informático', 'Otros'],
@@ -209,8 +209,8 @@ const projects = [
       { id: 'issue-1', description: 'Dificultad para coordinar reuniones con todos los stakeholders', status: 'resolved', resolution: 'Implementación de reuniones virtuales y grabación para asistencia asíncrona' },
       { id: 'issue-2', description: 'Datos históricos incompletos para análisis de tendencias', status: 'open', resolution: '' }
     ],
-    createdAt: '2025-01-10T08:00:00Z',
-    updatedAt: '2025-03-15T10:30:00Z',
+    createdAt: '2026-02-05T08:00:00Z',
+    updatedAt: '2026-08-18T10:30:00Z',
     roiData: {
       fte: {
         costPerYear: 12000000,
@@ -240,7 +240,7 @@ const projects = [
         moneySaved: 8640000,
         roi: 307.55,
         paybackMonths: 3.9,
-        lastUpdated: '2025-03-12T09:30:00Z'
+        lastUpdated: '2026-06-15T09:30:00Z'
       }
     }
   },
@@ -249,9 +249,9 @@ const projects = [
     name: 'Optimización de Línea de Producción',
     description: 'Mejora de eficiencia en la línea de producción principal utilizando metodología Lean Six Sigma y reducción de defectos en proceso de ensamblaje',
     status: 'planning',
-    progress: 25,
-    startDate: '2025-03-01',
-    endDate: '2025-07-30',
+    progress: 33,
+    startDate: '2026-09-07',
+    endDate: '2027-01-29',
     company: 'Manufacturas Industriales S.A.',
     phase: 'Define',
     team: [
@@ -266,9 +266,9 @@ const projects = [
       { id: 'kpi-6', name: 'Tiempo de Preparación (Setup)', baseLine: '45 minutos', target: '15 minutos', current: '40 minutos' }
     ],
     tools: {
-      'project-charter': { 
-        status: 'completed', 
-        updatedAt: '2025-03-15T09:15:00Z',
+      'project-charter': {
+        status: 'completed',
+        updatedAt: '2026-08-06T09:15:00Z',
         notes: 'Project Charter aprobado por Dirección de Operaciones y Gerencia General',
         data: {
           businessCase: 'La línea de producción principal opera con una eficiencia del 68% frente al estándar industrial del 85%. Los tiempos de preparación y la tasa de defectos generan costos adicionales estimados en ₡25 millones anuales.',
@@ -277,9 +277,9 @@ const projects = [
           goals: 'Aumentar el OEE a 85%, reducir la tasa de defectos por debajo del 0.8% y reducir el tiempo de preparación a 15 minutos o menos.'
         }
       },
-      'sipoc': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-20T14:30:00Z',
+      'sipoc': {
+        status: 'in_progress',
+        updatedAt: '2026-08-10T14:30:00Z',
         notes: 'SIPOC de proceso de ensamblaje completado, pendiente revisión' ,
         data: {
           processName: 'Ensamblaje de Componentes',
@@ -290,9 +290,9 @@ const projects = [
           customers: ['Departamento de Control de Calidad', 'Área de Empaque', 'Servicio al Cliente']
         }
       },
-      'voc': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-18T11:00:00Z',
+      'voc': {
+        status: 'in_progress',
+        updatedAt: '2026-08-09T11:00:00Z',
         notes: 'Entrevistas iniciales con clientes internos completadas',
         data: {
           customers: [
@@ -310,7 +310,7 @@ const projects = [
       },
       'stakeholder-analysis': {
         status: 'completed',
-        updatedAt: '2025-03-12T16:45:00Z',
+        updatedAt: '2026-08-05T16:45:00Z',
         notes: 'Análisis de stakeholders completado',
         data: {
           stakeholders: [
@@ -320,9 +320,9 @@ const projects = [
           ]
         }
       },
-      'roi-calculator': { 
-        status: 'in_progress', 
-        updatedAt: '2025-03-16T10:30:00Z',
+      'roi-calculator': {
+        status: 'in_progress',
+        updatedAt: '2026-08-07T10:30:00Z',
         notes: 'Estimaciones preliminares realizadas, pendiente validación de datos',
         data: {
           fte: {
@@ -353,7 +353,7 @@ const projects = [
             moneySaved: 11745000,
             roi: 38.18,
             paybackMonths: 8.7,
-            lastUpdated: '2025-03-16T10:30:00Z'
+            lastUpdated: '2026-08-07T10:30:00Z'
           }
         }
       }
@@ -363,8 +363,8 @@ const projects = [
       { id: 'risk-4', description: 'Falta de experiencia del equipo en técnicas avanzadas de six sigma', probability: 'media', impact: 'alta', mitigation: 'Capacitación previa y contratación de consultor especializado para acompañamiento' }
     ],
     issues: [],
-    createdAt: '2025-02-20T14:30:00Z',
-    updatedAt: '2025-03-20T14:30:00Z',
+    createdAt: '2026-08-05T08:00:00Z',
+    updatedAt: '2026-08-11T14:30:00Z',
     roiData: {
       fte: {
         costPerYear: 14500000,
@@ -394,7 +394,7 @@ const projects = [
         moneySaved: 11745000,
         roi: 38.18,
         paybackMonths: 8.7,
-        lastUpdated: '2025-03-16T10:30:00Z'
+        lastUpdated: '2026-08-07T10:30:00Z'
       }
     }
   },
@@ -404,8 +404,8 @@ const projects = [
     description: 'Aplicación de Six Sigma para reducir errores y mejorar satisfacción del cliente en el centro de atención telefónica y gestión de casos',
     status: 'completed',
     progress: 100,
-    startDate: '2024-09-01',
-    endDate: '2025-01-30',
+    startDate: '2025-11-03',
+    endDate: '2026-03-27',
     company: 'Soluciones Financieras S.A.',
     phase: 'Control',
     team: [
@@ -420,10 +420,10 @@ const projects = [
       { id: 'kpi-9', name: 'Satisfacción del Cliente (NPS)', baseLine: '42', target: '65', current: '68' }
     ],
     tools: {
-      'project-charter': { 
-        status: 'completed', 
-        updatedAt: '2024-09-10T11:30:00Z',
-        notes: 'Project Charter aprobado', 
+      'project-charter': {
+        status: 'completed',
+        updatedAt: '2025-11-10T11:30:00Z',
+        notes: 'Project Charter aprobado',
         data: {
           businessCase: 'El bajo índice de resolución en primera llamada (65%) y la alta tasa de errores en procesamiento (8.5%) están generando pérdida de clientes y sobrecostos operativos estimados en ₡18 millones anuales.',
           problemStatement: 'Los errores en el servicio al cliente generan reprocesos, insatisfacción y pérdida de clientes, afectando la rentabilidad y reputación de la empresa.',
@@ -431,9 +431,9 @@ const projects = [
           goals: 'Aumentar el First Call Resolution a 85%, reducir errores en procesamiento por debajo del 3% y elevar el NPS de 42 a 65 puntos.'
         }
       },
-      'sipoc': { 
-        status: 'completed', 
-        updatedAt: '2024-09-20T15:45:00Z',
+      'sipoc': {
+        status: 'completed',
+        updatedAt: '2025-11-20T15:45:00Z',
         notes: 'SIPOCs desarrollados para todos los procesos críticos',
         data: {
           processName: 'Atención de Consultas y Reclamos',
@@ -444,9 +444,9 @@ const projects = [
           customers: ['Clientes Externos', 'Departamento de Mejora Continua', 'Gerencia de Servicio']
         }
       },
-      'voc': { 
-        status: 'completed', 
-        updatedAt: '2024-10-05T14:20:00Z',
+      'voc': {
+        status: 'completed',
+        updatedAt: '2025-12-05T14:20:00Z',
         notes: 'VOC completado con clientes y empleados',
         data: {
           customers: [
@@ -456,9 +456,9 @@ const projects = [
           ]
         }
       },
-      'ctq': { 
-        status: 'completed', 
-        updatedAt: '2024-10-25T09:15:00Z',
+      'ctq': {
+        status: 'completed',
+        updatedAt: '2025-12-25T09:15:00Z',
         notes: 'CTQs definidos y validados',
         data: {
           requirements: [
@@ -468,9 +468,9 @@ const projects = [
           ]
         }
       },
-      'value-stream-map': { 
-        status: 'completed', 
-        updatedAt: '2024-11-15T16:30:00Z',
+      'value-stream-map': {
+        status: 'completed',
+        updatedAt: '2026-01-15T16:30:00Z',
         notes: 'VSM completado y validado',
         data: {
           currentState: {
@@ -484,9 +484,9 @@ const projects = [
           }
         }
       },
-      'stakeholder-analysis': { 
-        status: 'completed', 
-        updatedAt: '2024-09-15T10:20:00Z',
+      'stakeholder-analysis': {
+        status: 'completed',
+        updatedAt: '2025-11-15T10:20:00Z',
         notes: 'Análisis stakeholders finalizado',
         data: {
           stakeholders: [
@@ -496,9 +496,9 @@ const projects = [
           ]
         }
       },
-      'prioritization-matrix': { 
-        status: 'completed', 
-        updatedAt: '2024-11-10T13:40:00Z',
+      'prioritization-matrix': {
+        status: 'completed',
+        updatedAt: '2026-01-10T13:40:00Z',
         notes: 'Matriz priorización completada',
         data: {
           criteria: ['Impacto en satisfacción', 'Facilidad de implementación', 'Costo', 'Tiempo de implementación'],
@@ -511,7 +511,7 @@ const projects = [
       },
       'control-chart': {
         status: 'completed',
-        updatedAt: '2025-01-15T14:30:00Z',
+        updatedAt: '2026-03-17T14:30:00Z',
         notes: 'Gráficos de control implementados para monitoreo continuo',
         data: {
           metricName: 'Porcentaje de Errores en Procesamiento',
@@ -524,28 +524,28 @@ const projects = [
       },
       'fmea': {
         status: 'completed',
-        updatedAt: '2024-12-05T11:20:00Z',
+        updatedAt: '2026-02-04T11:20:00Z',
         notes: 'FMEA completo para procesos críticos',
         data: {
           process: 'Atención de Reclamaciones',
           failureModes: [
-            { 
-              mode: 'Registro incorrecto de información del cliente', 
-              effect: 'Seguimiento inadecuado, cliente contactado múltiples veces', 
-              causes: 'Formulario complejo, falta de validación, presión por tiempo', 
-              severity: 8, 
-              occurrence: 7, 
-              detection: 5, 
+            {
+              mode: 'Registro incorrecto de información del cliente',
+              effect: 'Seguimiento inadecuado, cliente contactado múltiples veces',
+              causes: 'Formulario complejo, falta de validación, presión por tiempo',
+              severity: 8,
+              occurrence: 7,
+              detection: 5,
               rpn: 280,
               actions: 'Simplificar formulario, agregar validaciones automáticas'
             },
-            { 
-              mode: 'Categorización errónea del caso', 
-              effect: 'Enrutamiento incorrecto, resolución retrasada', 
-              causes: 'Falta de criterios claros, formación insuficiente', 
-              severity: 6, 
-              occurrence: 6, 
-              detection: 4, 
+            {
+              mode: 'Categorización errónea del caso',
+              effect: 'Enrutamiento incorrecto, resolución retrasada',
+              causes: 'Falta de criterios claros, formación insuficiente',
+              severity: 6,
+              occurrence: 6,
+              detection: 4,
               rpn: 144,
               actions: 'Árbol de decisión automatizado, capacitación periódica'
             }
@@ -554,7 +554,7 @@ const projects = [
       },
       'pareto-chart': {
         status: 'completed',
-        updatedAt: '2024-10-30T15:15:00Z',
+        updatedAt: '2025-12-30T15:15:00Z',
         notes: 'Análisis de Pareto de causas de insatisfacción completado',
         data: {
           categories: ['Múltiples transferencias', 'Tiempo de espera', 'Información inconsistente', 'Promesas incumplidas', 'Trato inadecuado', 'Otros'],
@@ -564,7 +564,7 @@ const projects = [
       },
       'roi-calculator': {
         status: 'completed',
-        updatedAt: '2024-12-15T10:45:00Z',
+        updatedAt: '2026-02-14T10:45:00Z',
         notes: 'Análisis de ROI validado con Finanzas',
         data: {
           fte: {
@@ -595,7 +595,7 @@ const projects = [
             moneySaved: 18050000,
             roi: 381.33,
             paybackMonths: 2.5,
-            lastUpdated: '2024-12-15T10:45:00Z'
+            lastUpdated: '2026-02-14T10:45:00Z'
           }
         }
       }
@@ -605,8 +605,8 @@ const projects = [
       { id: 'lesson-2', category: 'Desafío', description: 'Las actualizaciones del sistema CRM tomaron más tiempo del previsto, lo que retrasó algunas implementaciones' },
       { id: 'lesson-3', category: 'Mejora', description: 'Para futuros proyectos, involucrar al departamento IT desde la fase de planificación para evitar cuellos de botella' }
     ],
-    createdAt: '2024-08-15T09:00:00Z',
-    updatedAt: '2025-01-30T16:30:00Z',
+    createdAt: '2025-10-15T09:00:00Z',
+    updatedAt: '2026-03-27T16:30:00Z',
     roiData: {
       fte: {
         costPerYear: 9500000,
@@ -636,7 +636,7 @@ const projects = [
         moneySaved: 18050000,
         roi: 381.33,
         paybackMonths: 2.5,
-        lastUpdated: '2024-12-15T10:45:00Z'
+        lastUpdated: '2026-02-14T10:45:00Z'
       }
     }
   },
@@ -645,9 +645,9 @@ const projects = [
     name: 'Mejora de Procesos Logísticos',
     description: 'Proyecto Lean Six Sigma para reducir tiempos de entrega y optimizar rutas de distribución utilizando análisis de datos',
     status: 'active',
-    progress: 50,
-    startDate: '2025-02-01',
-    endDate: '2025-06-30',
+    progress: 67,
+    startDate: '2026-03-02',
+    endDate: '2026-09-04',
     company: 'Distribuidora Nacional S.A.',
     phase: 'Analyze',
     team: [
@@ -661,9 +661,9 @@ const projects = [
       { id: 'kpi-12', name: 'Tasa de Entregas Perfectas', baseLine: '82%', target: '95%', current: '88%' }
     ],
     tools: {
-      'project-charter': { 
-        status: 'completed', 
-        updatedAt: '2025-02-10T14:30:00Z',
+      'project-charter': {
+        status: 'completed',
+        updatedAt: '2026-03-08T14:30:00Z',
         notes: 'Project Charter aprobado por dirección',
         data: {
           businessCase: 'Los tiempos de entrega actuales y la ineficiencia en rutas generan un sobrecosto anual de ₡32 millones y afectan la satisfacción de los clientes, poniendo en riesgo contratos por ₡150 millones.',
@@ -672,9 +672,9 @@ const projects = [
           goals: 'Reducir el tiempo promedio de entrega a 24 horas, disminuir el costo por kilómetro a ₡350 y aumentar la tasa de entregas perfectas al 95%.'
         }
       },
-      'sipoc': { 
-        status: 'completed', 
-        updatedAt: '2025-02-20T11:15:00Z',
+      'sipoc': {
+        status: 'completed',
+        updatedAt: '2026-03-18T11:15:00Z',
         notes: 'SIPOCs completados para procesos de distribución',
         data: {
           processName: 'Distribución de Mercancías',
@@ -685,9 +685,9 @@ const projects = [
           customers: ['Clientes Externos', 'Departamento de Facturación', 'Servicio al Cliente']
         }
       },
-      'value-stream-map': { 
-        status: 'completed', 
-        updatedAt: '2025-03-15T16:45:00Z',
+      'value-stream-map': {
+        status: 'completed',
+        updatedAt: '2026-05-10T16:45:00Z',
         notes: 'Value Stream Map completado para flujo logístico',
         data: {
           currentState: {
@@ -703,7 +703,7 @@ const projects = [
       },
       'pareto-chart': {
         status: 'completed',
-        updatedAt: '2025-03-20T13:30:00Z',
+        updatedAt: '2026-06-15T13:30:00Z',
         notes: 'Análisis de Pareto de causas de retrasos en entregas',
         data: {
           categories: ['Rutas ineficientes', 'Demoras en carga', 'Tráfico imprevisto', 'Documentación incompleta', 'Dirección incorrecta', 'Otros'],
@@ -713,7 +713,7 @@ const projects = [
       },
       'cause-effect-diagram': {
         status: 'in_progress',
-        updatedAt: '2025-03-25T10:20:00Z',
+        updatedAt: '2026-08-18T10:20:00Z',
         notes: 'Diagrama de Ishikawa en desarrollo para ineficiencias en rutas',
         data: {
           problem: 'Rutas de distribución ineficientes',
@@ -727,7 +727,7 @@ const projects = [
       },
       'roi-calculator': {
         status: 'in_progress',
-        updatedAt: '2025-03-22T14:15:00Z',
+        updatedAt: '2026-07-20T14:15:00Z',
         notes: 'Análisis preliminar de ROI en desarrollo',
         data: {
           fte: {
@@ -758,7 +758,7 @@ const projects = [
             moneySaved: 24780000,
             roi: 70.9,
             paybackMonths: 7.0,
-            lastUpdated: '2025-03-22T14:15:00Z'
+            lastUpdated: '2026-07-20T14:15:00Z'
           }
         }
       }
@@ -770,8 +770,8 @@ const projects = [
     issues: [
       { id: 'issue-3', description: 'Retrasos en implementación de software de optimización', status: 'open', resolution: '' }
     ],
-    createdAt: '2025-01-20T11:30:00Z',
-    updatedAt: '2025-03-25T10:20:00Z',
+    createdAt: '2026-02-20T11:30:00Z',
+    updatedAt: '2026-08-20T10:20:00Z',
     roiData: {
       fte: {
         costPerYear: 11800000,
@@ -801,7 +801,7 @@ const projects = [
         moneySaved: 24780000,
         roi: 70.9,
         paybackMonths: 7.0,
-        lastUpdated: '2025-03-22T14:15:00Z'
+        lastUpdated: '2026-07-20T14:15:00Z'
       }
     }
   }

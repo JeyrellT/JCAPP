@@ -1,164 +1,167 @@
-import React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, useInView, useReducedMotion } from 'framer-motion';
+import { DollarSign, TrendingUp, AlertCircle, Clock } from 'lucide-react';
 import { useLeanSixSigma } from '../../contexts/LeanSixSigmaContext';
-import { DollarSign, TrendingUp, Clock, AlertCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { formatCurrency, formatNumber, formatPercent, formatRelative } from '../../lib/format';
+import { fadeInUp, staggerContainer } from '../../lib/motion';
+import GradientButton from './GradientButton';
+import EmptyState from './EmptyState';
+
+const COUNT_UP_MS = 600;
 
 /**
- * Componente para mostrar un resumen del ROI de un proyecto
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
+ * Monto en colones que hace un count-up de ~600ms la primera vez que entra en
+ * el viewport. Bajo `prefers-reduced-motion` pinta el valor final directamente.
+ *
+ * @param {Object} props
+ * @param {number} props.value - Monto en CRC a animar.
+ * @param {string} [props.className]
  */
-const RoiSummary = ({ projectId }) => {
+function CurrencyCountUp({ value, className = '' }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-10% 0px' });
+  const shouldReduceMotion = useReducedMotion();
+  const [display, setDisplay] = useState(shouldReduceMotion ? value : 0);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (shouldReduceMotion) {
+      setDisplay(value);
+      return;
+    }
+    let frameId;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min((now - start) / COUNT_UP_MS, 1);
+      setDisplay(Math.round(value * progress));
+      if (progress < 1) frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [inView, shouldReduceMotion, value]);
+
+  return (
+    <span ref={ref} className={className}>
+      {formatCurrency(display)}
+    </span>
+  );
+}
+
+/**
+ * Resumen del ROI de un proyecto: ROI, payback, ahorro estimado, horas
+ * ahorradas, equivalente FTE y costo de implementación, todos leídos de
+ * `project.roiData.results` (sin desgloses ni cifras inventadas).
+ *
+ * @param {Object} props
+ * @param {string} props.projectId
+ * @param {string} [props.className]
+ */
+const RoiSummary = ({ projectId, className = '' }) => {
   const { getProject } = useLeanSixSigma();
   const project = getProject(projectId);
-  
-  // Si no hay datos de ROI o no hay proyecto, mostrar mensaje para configurar ROI
-  if (!project || !project.roiData || !project.roiData.results) {
+  const results = project?.roiData?.results;
+
+  if (!project || !results) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-lg p-4 text-center">
-        <div className="flex justify-center mb-3">
-          <div className="bg-amber-100 dark:bg-amber-800/50 p-2 rounded-full">
-            <AlertCircle className="text-amber-600 dark:text-amber-400" size={20} />
-          </div>
-        </div>
-        <h3 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">
-          Análisis Financiero Pendiente
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-          Utiliza la calculadora de ROI para evaluar el impacto financiero de este proyecto.
-        </p>
-        <button 
-          onClick={() => window.location.href = `/projects/${projectId}/tools/roi-calculator`}
-          className="text-sm px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors"
-        >
-          Configurar ROI
-        </button>
-      </div>
+      <EmptyState
+        variant="sin-datos"
+        size="sm"
+        title="Análisis financiero pendiente"
+        description="Utiliza la calculadora de ROI para evaluar el impacto financiero de este proyecto."
+        action={
+          <GradientButton size="sm" to={`/projects/${projectId}/tools/roi-calculator`}>
+            Calcular ROI
+          </GradientButton>
+        }
+        className={className}
+      />
     );
   }
-  
-  // Obtener datos de resultados
-  const { hoursSaved, fteEquivalent, moneySaved, roi, paybackMonths, lastUpdated } = project.roiData.results;
-  
-  // Calcular distribución de beneficios (35% ahorro, 65% ingresos)
-  const savings = moneySaved * 0.35;
-  const revenue = moneySaved * 0.65;
-  
-  // Formatear número con comas
-  const formatNumber = (num) => {
-    return new Intl.NumberFormat().format(Math.round(num));
-  };
-  
-  // Formatear número con decimales
-  const formatDecimal = (num, decimals = 1) => {
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    }).format(num);
-  };
-  
-  // Obtener fecha de última actualización
-  const lastUpdatedDate = new Date(lastUpdated);
-  const formattedDate = lastUpdatedDate.toLocaleDateString(undefined, { 
-    year: 'numeric', 
-    month: 'short', 
-    day: 'numeric' 
-  });
-  
-  // Verificar si el ROI es bueno (tiene un tiempo de recuperación <= 8 meses)
+
+  const { hoursSaved, fteEquivalent, moneySaved, roi, paybackMonths, lastUpdated } = results;
   const isGoodRoi = paybackMonths <= 8;
-  
-  // Variantes para animaciones
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  const itemVariants = {
-    hidden: { y: 10, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3
-      }
-    }
-  };
-  
+
   return (
-    <motion.div 
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700"
-      variants={containerVariants}
+    <motion.div
+      className={`card overflow-hidden ${className}`}
+      variants={staggerContainer}
       initial="hidden"
       animate="visible"
     >
-      <div className="p-4 bg-blue-500 dark:bg-blue-700 text-white">
-        <h3 className="text-lg font-medium flex items-center">
-          <DollarSign className="mr-2" size={18} />
-          Análisis Financiero
+      <div className="flex items-center justify-between gap-3 border-b border-line-subtle px-5 py-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-content">
+          <DollarSign size={16} className="text-content-secondary" aria-hidden="true" />
+          Análisis financiero
         </h3>
+        {lastUpdated && (
+          <span className="flex shrink-0 items-center gap-1 text-xs text-content-muted">
+            <Clock size={12} aria-hidden="true" />
+            Actualizado {formatRelative(lastUpdated)}
+          </span>
+        )}
       </div>
-      
-      <div className="p-4">
-        <motion.div variants={itemVariants} className="flex items-center mb-4">
-          <div className={`p-2 rounded-full ${isGoodRoi ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'} mr-3`}>
-            {isGoodRoi ? (
-              <TrendingUp className="text-green-600 dark:text-green-400" size={18} />
-            ) : (
-              <AlertCircle className="text-yellow-600 dark:text-yellow-400" size={18} />
-            )}
-          </div>
-          <div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">ROI del proyecto</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-gray-200">
-              {formatDecimal(roi)}%
-            </div>
-          </div>
-          <div className="ml-auto text-right">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Payback period</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-gray-200">
-              {formatDecimal(paybackMonths)} <span className="text-sm font-normal">meses</span>
-            </div>
-          </div>
-        </motion.div>
-        
-        <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Ahorro Operativo (35%)</div>
-            <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-              ${formatNumber(savings)}
-            </div>
-          </div>
-          
-          <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Ingresos Adicionales (65%)</div>
-            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-              ${formatNumber(revenue)}
-            </div>
-          </div>
-        </motion.div>
-        
-        <motion.div variants={itemVariants} className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <Clock className="w-4 h-4 text-gray-400 mr-1" />
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Última actualización: {formattedDate}
-              </span>
-            </div>
-            <button 
-              onClick={() => window.location.href = `/projects/${projectId}/tools/roi-calculator`}
-              className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 hover:underline"
+
+      <div className="space-y-4 p-5">
+        <motion.div variants={fadeInUp} className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                isGoodRoi ? 'bg-success-soft text-success-on' : 'bg-warning-soft text-warning-on'
+              }`}
             >
-              Ver detalles
-            </button>
+              {isGoodRoi ? (
+                <TrendingUp size={18} aria-hidden="true" />
+              ) : (
+                <AlertCircle size={18} aria-hidden="true" />
+              )}
+            </span>
+            <div>
+              <div className="text-xs text-content-muted">ROI del proyecto</div>
+              <div className="text-xl font-bold tabular-nums text-content">{formatPercent(roi, 1)}</div>
+            </div>
           </div>
+
+          <div>
+            <div className="text-xs text-content-muted">Payback</div>
+            <div className="text-xl font-bold tabular-nums text-content">
+              {formatNumber(paybackMonths, { maximumFractionDigits: 1 })}{' '}
+              <span className="text-sm font-normal text-content-secondary">meses</span>
+            </div>
+            <div className="text-2xs text-content-muted">Payback objetivo: 8 meses</div>
+          </div>
+        </motion.div>
+
+        <motion.div variants={fadeInUp} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-surface-sunken p-3">
+            <div className="text-xs text-content-muted">Ahorro estimado</div>
+            <CurrencyCountUp value={moneySaved} className="text-lg font-bold tabular-nums text-content" />
+          </div>
+          <div className="rounded-lg bg-surface-sunken p-3">
+            <div className="text-xs text-content-muted">Horas ahorradas</div>
+            <div className="text-lg font-bold tabular-nums text-content">{formatNumber(hoursSaved)}</div>
+          </div>
+          <div className="rounded-lg bg-surface-sunken p-3">
+            <div className="text-xs text-content-muted">Equivalente FTE</div>
+            <div className="text-lg font-bold tabular-nums text-content">
+              {formatNumber(fteEquivalent, { maximumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div className="rounded-lg bg-surface-sunken p-3">
+            <div className="text-xs text-content-muted">Costo de implementación</div>
+            <div className="text-lg font-bold tabular-nums text-content">
+              {formatCurrency(project.roiData.implementationCost)}
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div variants={fadeInUp} className="flex items-center justify-end border-t border-line-subtle pt-3">
+          <Link
+            to={`/projects/${projectId}/tools/roi-calculator`}
+            className="rounded text-xs font-medium text-brand transition-colors duration-fast hover:text-brand-hover"
+          >
+            Ver detalles
+          </Link>
         </motion.div>
       </div>
     </motion.div>

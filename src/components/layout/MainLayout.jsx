@@ -5,6 +5,7 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
 import { pageTransition } from '../../lib/motion';
+import ErrorBoundary from '../common/ErrorBoundary';
 
 const SIDEBAR_COLLAPSE_KEY = 'jc_sidebar_collapsed';
 
@@ -141,7 +142,9 @@ const MainLayout = () => {
                 initial={reduceMotion ? false : pageTransition.initial}
                 animate={pageTransition.animate}
               >
-                <Outlet />
+                <ErrorBoundary resetKeys={[location.pathname]}>
+                  <Outlet />
+                </ErrorBoundary>
               </motion.div>
             </AnimatePresence>
           </div>
