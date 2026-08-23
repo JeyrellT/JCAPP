@@ -48,7 +48,7 @@ const Breadcrumbs = ({ items, className = '' }) => {
               ) : item.to ? (
                 <Link
                   to={item.to}
-                  className="max-w-[22ch] truncate rounded transition-colors duration-fast hover:text-content"
+                  className="max-w-[22ch] truncate rounded py-1 -my-1 transition-colors duration-fast hover:text-content"
                 >
                   {item.label}
                 </Link>

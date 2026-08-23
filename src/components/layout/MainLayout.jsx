@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import Navbar from './Navbar';
@@ -31,6 +31,13 @@ const MainLayout = () => {
   // Estado del drawer móvil (<lg).
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Foco: el drawer móvil es un role="dialog" modal (ver Navbar). El elemento
+  // que lo disparó (el botón hamburguesa) se guarda aquí para devolverle el
+  // foco al cerrar, y drawerRef enfoca el propio drawer al abrir.
+  const drawerRef = useRef(null);
+  const previousFocusRef = useRef(null);
+  const wasMobileOpenRef = useRef(false);
+
   useEffect(() => {
     try {
       window.localStorage.setItem(SIDEBAR_COLLAPSE_KEY, String(collapsed));
@@ -55,6 +62,56 @@ const MainLayout = () => {
     };
   }, [mobileOpen]);
 
+  // Al abrir, mover el foco al propio drawer (dialog modal).
+  useEffect(() => {
+    if (!mobileOpen) return;
+    drawerRef.current?.focus();
+  }, [mobileOpen]);
+
+  // Al cerrar (por cualquier vía: Escape, backdrop, cambio de ruta, enlace
+  // interno), devolver el foco al elemento que abrió el drawer.
+  useEffect(() => {
+    if (mobileOpen) {
+      wasMobileOpenRef.current = true;
+      return;
+    }
+    if (wasMobileOpenRef.current) {
+      wasMobileOpenRef.current = false;
+      previousFocusRef.current?.focus?.();
+    }
+  }, [mobileOpen]);
+
+  // Escape para cerrar y trampa de foco (Tab / Shift+Tab ciclan dentro del drawer).
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const node = drawerRef.current;
+      if (!node) return;
+      const focusable = node.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileOpen]);
+
   // El botón de menú de la barra superior tiene doble función: en escritorio
   // alterna el colapso del sidebar; en móvil abre/cierra el drawer.
   const handleMenuClick = () => {
@@ -62,7 +119,13 @@ const MainLayout = () => {
     if (isDesktop) {
       setCollapsed((prev) => !prev);
     } else {
-      setMobileOpen((prev) => !prev);
+      setMobileOpen((prev) => {
+        const next = !prev;
+        if (next && typeof document !== 'undefined') {
+          previousFocusRef.current = document.activeElement;
+        }
+        return next;
+      });
     }
   };
 
@@ -115,7 +178,10 @@ const MainLayout = () => {
           {mobileOpen && (
             <motion.div
               key="sidebar-drawer"
-              className="fixed inset-y-0 left-0 z-sidebar w-[264px] border-r border-line bg-surface shadow-overlay lg:hidden"
+              id="sidebar-drawer"
+              ref={drawerRef}
+              tabIndex={-1}
+              className="fixed inset-y-0 left-0 z-sidebar w-[264px] border-r border-line bg-surface shadow-overlay outline-none lg:hidden"
               initial={reduceMotion ? false : { x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}

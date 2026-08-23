@@ -30,6 +30,7 @@ function getSystemTheme() {
 }
 
 // Hook personalizado para usar el tema
+// eslint-disable-next-line react-refresh/only-export-components -- ~15 archivos ya importan useTheme desde aqui; separar el archivo no es practico en este ciclo.
 export function useTheme() {
   return useContext(ThemeContext);
 }

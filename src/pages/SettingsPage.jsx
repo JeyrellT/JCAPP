@@ -50,11 +50,11 @@ import GitHubExporter from '../components/common/GitHubExporter';
 const PREF_COPY = {
   autoSave: {
     label: 'Autoguardado',
-    description: 'Tu preferencia se guarda en este navegador y se aplicará en los formularios que la usen.',
+    description: 'Guarda tus cambios automáticamente en los formularios que lo admiten. Se aplica solo en este navegador.',
   },
   showHelp: {
     label: 'Mostrar ayuda en herramientas',
-    description: 'Tu preferencia se guarda en este navegador y se aplicará en las herramientas que la usen.',
+    description: 'Muestra textos de ayuda dentro de las herramientas que los incluyen. Se aplica solo en este navegador.',
   },
 };
 
@@ -215,7 +215,6 @@ const SettingsPage = () => {
           <button
             type="button"
             onClick={() => setTheme('light')}
-            aria-pressed={theme === 'light'}
             className={`relative flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors duration-fast ${
               theme === 'light' ? 'border-brand bg-brand/5' : 'border-line hover:bg-surface-sunken'
             }`}
@@ -228,7 +227,6 @@ const SettingsPage = () => {
           <button
             type="button"
             onClick={() => setTheme('dark')}
-            aria-pressed={theme === 'dark'}
             className={`relative flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors duration-fast ${
               theme === 'dark' ? 'border-brand bg-brand/5' : 'border-line hover:bg-surface-sunken'
             }`}
@@ -249,7 +247,7 @@ const SettingsPage = () => {
         </div>
         <p className="mt-3 text-xs text-content-muted">
           &quot;Sistema&quot; aplica ahora mismo la preferencia de tu sistema operativo. No queda sincronizado en
-          adelante: si tu sistema cambia de tema más tarde, vuelve a pulsarlo.
+          adelante: si tu sistema cambia de tema más tarde, selecciónalo de nuevo.
         </p>
       </section>
 

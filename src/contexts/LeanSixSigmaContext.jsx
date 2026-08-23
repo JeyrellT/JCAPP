@@ -7,6 +7,7 @@ import { loadProjects, saveProjects, loadTools, saveTools } from '../utils/stora
 const LeanSixSigmaContext = createContext();
 
 // Hook personalizado para usar el contexto
+// eslint-disable-next-line react-refresh/only-export-components -- ~30 archivos ya importan useLeanSixSigma desde aqui; separar el archivo no es practico.
 export function useLeanSixSigma() {
   return useContext(LeanSixSigmaContext);
 }

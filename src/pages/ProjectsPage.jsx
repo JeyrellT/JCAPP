@@ -15,9 +15,9 @@ import { staggerContainer, fadeInUp } from '../lib/motion';
 
 const SORT_OPTIONS = [
   { value: 'urgency', label: 'Urgencia' },
-  { value: 'updated', label: 'Actualizado' },
+  { value: 'updated', label: 'Última actualización' },
   { value: 'progress', label: 'Avance' },
-  { value: 'name', label: 'Nombre A-Z' },
+  { value: 'name', label: 'Nombre (A–Z)' },
 ];
 
 /** Avance derivado (fórmula 0.4.1 del brief): nunca `project.progress` crudo. */
@@ -153,7 +153,7 @@ const ProjectsPage = () => {
             <input
               id="projects-search"
               type="text"
-              placeholder="Buscar por nombre, descripción o empresa..."
+              placeholder="Buscar por nombre, descripción o empresa…"
               className="input pl-9 pr-8"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -249,7 +249,7 @@ const ProjectsPage = () => {
       {/* Contador y chips de filtros activos */}
       <div className="flex flex-wrap items-center gap-2 text-sm text-content-secondary">
         <span>
-          Mostrando {filteredProjects.length} de {projects.length} proyectos
+          Mostrando {filteredProjects.length} de {projects.length} proyecto{projects.length === 1 ? '' : 's'}
         </span>
         {activeFilters.map((filter) => (
           <span key={filter.key} className="badge bg-surface-sunken text-content-secondary">
@@ -298,7 +298,7 @@ const ProjectsPage = () => {
         <EmptyState
           variant="sin-resultados"
           title="Ningún proyecto coincide"
-          description="Prueba con otra fase u otro estado."
+          description="Ajusta la búsqueda o limpia los filtros para volver a ver tus proyectos."
           action={
             <GradientButton variant="outline" onClick={clearAllFilters}>
               Limpiar filtros

@@ -12,6 +12,7 @@ import Notification from '../common/Notification';
  * Exportadas para que EditProjectForm no las redeclare (mismo carril, sin
  * crear un archivo nuevo fuera del alcance de B3).
  */
+// eslint-disable-next-line react-refresh/only-export-components -- constante compartida con EditProjectForm/TeamMemberForm, no un componente.
 export const PROJECT_FORM_RULES = {
   NAME_MAX_LENGTH: 100,
   DESCRIPTION_MAX_LENGTH: 500,
@@ -20,6 +21,7 @@ export const PROJECT_FORM_RULES = {
 };
 
 /** Roles habituales para el <datalist> de rol de equipo, compartidos entre los tres formularios del carril. */
+// eslint-disable-next-line react-refresh/only-export-components -- constante compartida, no un componente.
 export const COMMON_TEAM_ROLES = [
   'Líder del Proyecto',
   'Patrocinador',

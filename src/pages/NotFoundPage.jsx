@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Home, ArrowLeft, LayoutDashboard, FolderKanban, Wrench, BarChart3, Plus } from 'lucide-react';
 import GradientButton from '../components/common/GradientButton';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 // Curvas del sistema de movimiento (ver brief Ciclo 1, sección 2.8).
 // Se declaran localmente: src/lib/motion.js es propiedad de otro carril
@@ -105,6 +106,7 @@ function ControlLineIllustration({ reduceMotion }) {
 }
 
 const NotFoundPage = () => {
+  useDocumentTitle('Página no encontrada');
   const location = useLocation();
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
@@ -141,8 +143,8 @@ const NotFoundPage = () => {
         variants={reduceMotion ? undefined : itemVariants}
         className="mb-5 max-w-md text-sm text-content-secondary"
       >
-        La dirección solicitada no existe o cambió de ubicación. Como todo punto fuera de
-        control: investíguela o vuelva al proceso.
+        Esta página no existe o cambió de ubicación. Como todo punto fuera de
+        control: investígala o vuelve al proceso.
       </motion.p>
 
       <motion.div variants={reduceMotion ? undefined : itemVariants} className="mb-8 max-w-full">

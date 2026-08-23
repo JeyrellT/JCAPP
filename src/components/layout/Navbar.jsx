@@ -21,7 +21,7 @@ import { popover } from '../../lib/motion';
  * la marca, el interruptor de tema y un menú de usuario reducido (sin datos
  * ficticios: no hay sesión ni notificaciones simuladas en esta versión).
  */
-const Navbar = ({ onMenuClick, sidebarCollapsed }) => {
+const Navbar = ({ onMenuClick, sidebarCollapsed, mobileOpen }) => {
   const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,6 +82,8 @@ const Navbar = ({ onMenuClick, sidebarCollapsed }) => {
             onClick={onMenuClick}
             className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-content lg:hidden"
             aria-label="Abrir menú de navegación"
+            aria-expanded={mobileOpen}
+            aria-controls="sidebar-drawer"
           >
             <Menu size={20} />
           </button>
@@ -149,7 +151,7 @@ const Navbar = ({ onMenuClick, sidebarCollapsed }) => {
                     className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-content transition-colors duration-fast hover:bg-surface-sunken"
                   >
                     {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                    <span className="flex-1">Tema {theme === 'dark' ? 'claro' : 'oscuro'}</span>
+                    <span className="flex-1">Cambiar a tema {theme === 'dark' ? 'claro' : 'oscuro'}</span>
                   </button>
 
                   <Link

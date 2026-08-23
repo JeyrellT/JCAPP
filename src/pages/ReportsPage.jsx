@@ -188,13 +188,15 @@ const ReportsPage = () => {
       acc.implementationCost += project.roiData.implementationCost || 0;
       acc.hoursSaved += r.hoursSaved || 0;
       acc.fteEquivalent += r.fteEquivalent || 0;
-      acc.roiSum += r.roi || 0;
-      acc.count += 1;
       return acc;
     },
-    { moneySaved: 0, implementationCost: 0, hoursSaved: 0, fteEquivalent: 0, roiSum: 0, count: 0 }
+    { moneySaved: 0, implementationCost: 0, hoursSaved: 0, fteEquivalent: 0 }
   );
-  const averageRoi = financialTotals.count ? financialTotals.roiSum / financialTotals.count : 0;
+  // ROI de la cartera derivado de los propios totales (no un promedio de
+  // porcentajes individuales, que sobrestima el retorno real — ver brief F6/B1).
+  const portfolioRoi = financialTotals.implementationCost
+    ? ((financialTotals.moneySaved - financialTotals.implementationCost) / financialTotals.implementationCost) * 100
+    : 0;
 
   // Tokens del gráfico resueltos a color real (recharts recibe strings de
   // color, var() no resuelve en atributos de presentación SVG). Un único
@@ -310,9 +312,9 @@ const ReportsPage = () => {
       ) : projects.length === 0 ? (
         <EmptyState
           variant="sin-datos"
-          title="Tu ROI aparecerá aquí"
-          description="Para calcular el retorno se necesitan los datos de al menos un proyecto. Completa el análisis costo-beneficio y este panel cobra vida."
-          action={<GradientButton to="/projects">Ver proyectos</GradientButton>}
+          title="Tus reportes aparecerán aquí"
+          description="Crea al menos un proyecto para ver aquí el resumen ejecutivo de tu cartera: avance, KPIs e impacto financiero."
+          action={<GradientButton to="/projects/new">Crear un proyecto</GradientButton>}
         />
       ) : (
         <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-6">
@@ -395,7 +397,7 @@ const ReportsPage = () => {
                   color="success"
                 />
                 <StatCard
-                  title="Tasa de completitud"
+                  title="Tasa de finalización"
                   value={formatPercent(stats.completionRate)}
                   icon={<PieChartIcon size={20} aria-hidden="true" />}
                   color="warning"
@@ -565,7 +567,7 @@ const ReportsPage = () => {
                             ROI
                           </th>
                           <th scope="col" className="px-5 py-3 text-right font-medium">
-                            Payback
+                            Recuperación
                           </th>
                           <th scope="col" className="px-5 py-3 text-right font-medium">
                             Horas ahorradas
@@ -610,7 +612,7 @@ const ReportsPage = () => {
                         <tr className="border-t border-line bg-surface-sunken/60 font-semibold text-content">
                           <td className="px-5 py-3">Total de la cartera</td>
                           <td className="px-5 py-3 text-right tabular-nums">{formatCurrency(financialTotals.moneySaved)}</td>
-                          <td className="px-5 py-3 text-right tabular-nums">{formatPercent(averageRoi, 1)}</td>
+                          <td className="px-5 py-3 text-right tabular-nums">{formatPercent(portfolioRoi, 1)}</td>
                           <td className="px-5 py-3 text-right text-content-secondary">—</td>
                           <td className="px-5 py-3 text-right tabular-nums">{formatNumber(financialTotals.hoursSaved)}</td>
                           <td className="px-5 py-3 text-right tabular-nums">
