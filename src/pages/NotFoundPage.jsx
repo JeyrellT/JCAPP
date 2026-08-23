@@ -1,106 +1,196 @@
-import { Link } from 'react-router-dom';
-import { Home, ArrowLeft, Search } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Home, ArrowLeft, LayoutDashboard, FolderKanban, Wrench, BarChart3, Plus } from 'lucide-react';
 import GradientButton from '../components/common/GradientButton';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+
+// Curvas del sistema de movimiento (ver brief Ciclo 1, sección 2.8).
+// Se declaran localmente: src/lib/motion.js es propiedad de otro carril
+// y esta página no depende de su existencia para compilar.
+const EASE_DECELERATE = [0.05, 0.7, 0.1, 1];
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.04, delayChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: EASE_DECELERATE } },
+};
+
+// Destinos reales de la app. Ninguno cae en el catch-all.
+const destinations = [
+  { label: 'Panel', to: '/', icon: LayoutDashboard },
+  { label: 'Proyectos', to: '/projects', icon: FolderKanban },
+  { label: 'Herramientas', to: '/tools', icon: Wrench },
+  { label: 'Reportes', to: '/reports', icon: BarChart3 },
+  { label: 'Nuevo proyecto', to: '/projects/new', icon: Plus },
+];
+
+// Motivo de marca: una línea de control con un punto fuera de los límites.
+// Alturas relativas de los puntos (positivo = arriba de la línea central).
+const CONTROL_POINTS = [8, -4, 2, -10, 6, -2, 34, 4];
+const OUTLIER_INDEX = 6;
+
+/**
+ * Ilustración simple, inline y sin dependencias: una línea de control
+ * estadístico con límites punteados y un punto que se sale del rango.
+ * Es la firma visual del error: algo salió de los límites esperados.
+ */
+function ControlLineIllustration({ reduceMotion }) {
+  const width = 320;
+  const height = 96;
+  const midY = height / 2;
+  const stepX = width / (CONTROL_POINTS.length - 1);
+  const scaleY = 1.6;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      fill="none"
+      role="img"
+      aria-label="Línea de control con un punto fuera de los límites"
+      className="max-w-full text-line-strong"
+    >
+      {/* Límites de control superior e inferior */}
+      <line x1="0" y1={midY - 26} x2={width} y2={midY - 26} stroke="currentColor" strokeWidth="1" strokeDasharray="4 4" />
+      <line x1="0" y1={midY + 26} x2={width} y2={midY + 26} stroke="currentColor" strokeWidth="1" strokeDasharray="4 4" />
+      {/* Línea central */}
+      <line x1="0" y1={midY} x2={width} y2={midY} stroke="currentColor" strokeWidth="1" opacity="0.5" />
+
+      {/* Trazo que une los puntos */}
+      <motion.polyline
+        points={CONTROL_POINTS.map((v, i) => `${i * stepX},${midY - v * scaleY}`).join(' ')}
+        fill="none"
+        className="text-brand"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+        animate={reduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.6, ease: EASE_DECELERATE, delay: 0.15 }}
+      />
+
+      {CONTROL_POINTS.map((v, i) => {
+        const isOutlier = i === OUTLIER_INDEX;
+        const cx = i * stepX;
+        const cy = midY - v * scaleY;
+        return (
+          <motion.circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={isOutlier ? 5 : 3}
+            className={isOutlier ? 'text-danger' : 'text-brand'}
+            fill="currentColor"
+            initial={reduceMotion ? false : { scale: 0, opacity: 0 }}
+            animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
+            transition={
+              isOutlier
+                ? { type: 'spring', stiffness: 420, damping: 34, mass: 0.9, delay: 0.65 }
+                : { duration: 0.2, ease: EASE_DECELERATE, delay: 0.2 + i * 0.05 }
+            }
+          />
+        );
+      })}
+    </svg>
+  );
+}
 
 const NotFoundPage = () => {
-  // Variantes para animaciones
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3
-      }
-    }
-  };
+  useDocumentTitle('Página no encontrada');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
+  // "Volver atrás" solo tiene sentido si hay una entrada previa en el historial
+  // de esta pestaña; si no, el botón queda oculto en vez de quedar inerte.
+  const [canGoBack] = useState(() => typeof window !== 'undefined' && window.history.length > 1);
 
   return (
     <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4"
+      variants={reduceMotion ? undefined : containerVariants}
+      initial={reduceMotion ? undefined : 'hidden'}
+      animate={reduceMotion ? undefined : 'visible'}
+      className="flex flex-col items-center justify-center min-h-[70vh] px-4 py-16 text-center"
     >
-      <motion.div
-        variants={itemVariants}
-        className="w-24 h-24 mb-8 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center"
-      >
-        <Search size={40} className="text-gray-500" />
+      <motion.div variants={reduceMotion ? undefined : itemVariants} className="mb-8">
+        <ControlLineIllustration reduceMotion={reduceMotion} />
       </motion.div>
-      
-      <motion.h1 
-        variants={itemVariants}
-        className="text-6xl font-bold text-gray-800 dark:text-white mb-4"
+
+      <motion.p
+        variants={reduceMotion ? undefined : itemVariants}
+        className="mb-3 text-2xs font-semibold uppercase tracking-wider text-content-muted"
       >
-        404
-      </motion.h1>
-      
-      <motion.h2 
-        variants={itemVariants}
-        className="text-2xl font-medium text-gray-700 dark:text-gray-300 mb-6"
-      >
-        Página no encontrada
-      </motion.h2>
-      
-      <motion.p 
-        variants={itemVariants}
-        className="max-w-md text-gray-600 dark:text-gray-400 mb-8"
-      >
-        Lo sentimos, la página que estás buscando no existe o ha sido movida.
-        Por favor, verifica la URL o regresa a la página de inicio.
+        Error 404
       </motion.p>
-      
-      <motion.div 
-        variants={itemVariants}
-        className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4"
+
+      <motion.h1
+        variants={reduceMotion ? undefined : itemVariants}
+        className="mb-4 max-w-xl text-3xl font-semibold text-content sm:text-4xl"
       >
-        <GradientButton to="/" className="flex items-center justify-center">
-          <Home size={18} className="mr-2" /> Ir al inicio
-        </GradientButton>
-        
-        <GradientButton
-          variant="secondary"
-          onClick={() => window.history.back()}
-          className="flex items-center justify-center"
-        >
-          <ArrowLeft size={18} className="mr-2" /> Volver atrás
-        </GradientButton>
+        Fuera de los límites de control
+      </motion.h1>
+
+      <motion.p
+        variants={reduceMotion ? undefined : itemVariants}
+        className="mb-5 max-w-md text-sm text-content-secondary"
+      >
+        Esta página no existe o cambió de ubicación. Como todo punto fuera de
+        control: investígala o vuelve al proceso.
+      </motion.p>
+
+      <motion.div variants={reduceMotion ? undefined : itemVariants} className="mb-8 max-w-full">
+        <p className="mb-1.5 text-2xs font-medium uppercase tracking-wider text-content-muted">
+          Ruta solicitada
+        </p>
+        <code className="inline-block max-w-full truncate rounded-md border border-line bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-content-secondary">
+          {location.pathname}
+        </code>
       </motion.div>
-      
-      {/* Ilustración de fondo */}
-      <div className="absolute inset-0 -z-10 flex items-center justify-center opacity-5 pointer-events-none overflow-hidden">
-        <svg width="800" height="800" viewBox="0 0 300 300">
-          <defs>
-            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#4f46e5" />
-              <stop offset="100%" stopColor="#14b8a6" />
-            </linearGradient>
-          </defs>
-          <g fill="none" stroke="url(#gradient)" strokeWidth="2">
-            <circle cx="150" cy="150" r="100" />
-            <circle cx="150" cy="150" r="80" />
-            <circle cx="150" cy="150" r="60" />
-            <circle cx="150" cy="150" r="40" />
-            <circle cx="150" cy="150" r="20" />
-            <line x1="50" y1="150" x2="250" y2="150" />
-            <line x1="150" y1="50" x2="150" y2="250" />
-            <line x1="75" y1="75" x2="225" y2="225" />
-            <line x1="75" y1="225" x2="225" y2="75" />
-          </g>
-        </svg>
-      </div>
+
+      <motion.div
+        variants={reduceMotion ? undefined : itemVariants}
+        className="mb-10 flex flex-col items-center gap-3 sm:flex-row"
+      >
+        <GradientButton to="/" className="inline-flex items-center justify-center">
+          <Home size={18} className="mr-2" aria-hidden="true" /> Ir al inicio
+        </GradientButton>
+
+        {canGoBack && (
+          <GradientButton
+            variant="secondary"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center justify-center"
+          >
+            <ArrowLeft size={18} className="mr-2" aria-hidden="true" /> Volver atrás
+          </GradientButton>
+        )}
+      </motion.div>
+
+      <motion.nav
+        variants={reduceMotion ? undefined : itemVariants}
+        aria-label="Destinos disponibles"
+        className="flex max-w-lg flex-wrap items-center justify-center gap-2"
+      >
+        {destinations.map(({ label, to, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-content-secondary transition-colors hover:border-line-strong hover:bg-surface-sunken hover:text-content"
+          >
+            <Icon size={13} aria-hidden="true" />
+            {label}
+          </Link>
+        ))}
+      </motion.nav>
     </motion.div>
   );
 };

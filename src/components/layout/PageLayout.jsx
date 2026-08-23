@@ -1,44 +1,34 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { staggerContainer } from '../../lib/motion';
 
 /**
- * PageLayout component provides a consistent layout structure for pages
- * 
- * @param {string} title - The title of the page
- * @param {ReactNode} children - The content of the page
- * @param {boolean} animate - Whether to animate the page content (default: true)
- * @param {object} className - Additional classes for the container
+ * PageLayout: estructura consistente para el contenido de una página dentro
+ * del shell (MainLayout ya aporta el ancho máximo y el padding exterior).
+ * Mantiene la API existente (title, children, animate, className) para no
+ * romper a los consumidores actuales.
+ *
+ * @param {string} title - Título de la página (renderiza un h1)
+ * @param {ReactNode} children - Contenido de la página
+ * @param {boolean} animate - Si se anima la entrada del contenido (default: true)
+ * @param {string} className - Clases adicionales para el contenedor
  */
 const PageLayout = ({ title, children, animate = true, className = '' }) => {
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        duration: 0.3,
-        when: "beforeChildren",
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  // Base container component (with or without animation)
-  const Container = animate ? motion.div : 'div';
+  const reduceMotion = useReducedMotion();
+  const shouldAnimate = animate && !reduceMotion;
+  const Container = shouldAnimate ? motion.div : 'div';
 
   return (
-    <div className={`page-container px-4 py-6 max-w-7xl mx-auto ${className}`}>
+    <div className={`space-y-6 ${className}`}>
       {title && (
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight text-content">{title}</h1>
         </header>
       )}
-      
+
       <Container
-        variants={animate ? containerVariants : undefined}
-        initial={animate ? "hidden" : undefined}
-        animate={animate ? "visible" : undefined}
-        className="page-content"
+        variants={shouldAnimate ? staggerContainer : undefined}
+        initial={shouldAnimate ? 'hidden' : undefined}
+        animate={shouldAnimate ? 'visible' : undefined}
       >
         {children}
       </Container>

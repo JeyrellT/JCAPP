@@ -1,1228 +1,977 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
-import debounce from 'lodash/debounce';
-import { 
-  DollarSign, 
-  Clock, 
-  User, 
-  TrendingUp, 
-  Calendar, 
-  Sliders, 
-  HelpCircle, 
-  PlayCircle, 
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DollarSign,
+  Clock,
+  User,
+  TrendingUp,
+  Calendar,
+  Sliders,
+  HelpCircle,
+  PlayCircle,
   PauseCircle,
   BarChart2,
-  Save
+  Check,
+  Loader2,
+  AlertTriangle,
+  Eye,
+  Undo2,
+  Plus,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatNumber, formatPercent, formatCurrency, formatRelative } from '../lib/format';
+import { transition } from '../lib/motion';
 
-/**
- * Componente para la calculadora de ROI (Return on Investment)
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- */
-const RoiCalculator = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  
-  // Estados para la configuración FTE
-  const [costPerYear, setCostPerYear] = useState(12000000);
-  const [timeUnitType, setTimeUnitType] = useState('monthly');
-  const [timeUnitValue, setTimeUnitValue] = useState(160);
-  
-  // Estados para costos de implementación
-  const [implementationCost, setImplementationCost] = useState(2120000);
-  
-  // Estados para el proceso antes de la mejora
-  const [minutesBefore, setMinutesBefore] = useState(60);
-  const [frequencyTypeBefore, setFrequencyTypeBefore] = useState('monthly');
-  const [frequencyValueBefore, setFrequencyValueBefore] = useState(4);
-  const [peopleCountBefore, setPeopleCountBefore] = useState(2);
-  
-  // Estados para el proceso después de la mejora
-  const [minutesAfter, setMinutesAfter] = useState(15);
-  const [frequencyTypeAfter, setFrequencyTypeAfter] = useState('monthly');
-  const [frequencyValueAfter, setFrequencyValueAfter] = useState(4);
-  const [peopleCountAfter, setPeopleCountAfter] = useState(1);
-  
-  // Estados para configuración de adopción
-  const [adoptionCurveType, setAdoptionCurveType] = useState('linear');
-  const [inflectionPoint, setInflectionPoint] = useState(6);
-  
-  // Estados para visualización y animación
-  const [selectedMonth, setSelectedMonth] = useState(12);
-  const [viewAccumulated, setViewAccumulated] = useState(true);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
-  const [animationSpeed, setAnimationSpeed] = useState(3000);
-  const [showSpeedSettings, setShowSpeedSettings] = useState(false);
-    // Estado para resultados calculados
-  const [results, setResults] = useState({
-    hoursSaved: 0,
-    fteEquivalent: 0,
-    moneySaved: 0,
-    roi: 0,
-    paybackMonths: 0,
-    hoursBefore: 0,
-    hoursAfter: 0,
-    percentReduction: 0,
-    annualHours: 0,
-    costPerHour: 0,
-    monthlySavings: [],
-    breakEvenMonth: null,
-    adoptionPercentages: [],
-    annualSavings: 0,
-    annualRevenue: 0
-  });
+const TOOL_ID = 'roi-calculator';
 
-  // Estado para mensaje de guardado exitoso
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
-  
-  // Estados para tooltips
-  const [tooltips, setTooltips] = useState({
-    fte: false,
-    hourCost: false,
-    roi: false,
-    payback: false
-  });
-  
-  // Tasa de cambio aproximada (colones por dólar)
-  const [exchangeRate] = useState(535);
-  
-  // Cargar datos de ROI si existen en el proyecto
-  useEffect(() => {
-    if (project && project.roiData) {
-      // Cargar datos de FTE
-      if (project.roiData.fte) {
-        setCostPerYear(project.roiData.fte.costPerYear || costPerYear);
-        setTimeUnitType(project.roiData.fte.timeUnitType || timeUnitType);
-        setTimeUnitValue(project.roiData.fte.timeUnitValue || timeUnitValue);
-      }
-      
-      // Cargar datos de implementación
-      setImplementationCost(project.roiData.implementationCost || implementationCost);
-      
-      // Cargar datos de proceso antes
-      if (project.roiData.processBefore) {
-        setMinutesBefore(project.roiData.processBefore.minutes || minutesBefore);
-        setFrequencyTypeBefore(project.roiData.processBefore.frequencyType || frequencyTypeBefore);
-        setFrequencyValueBefore(project.roiData.processBefore.frequencyValue || frequencyValueBefore);
-        setPeopleCountBefore(project.roiData.processBefore.peopleCount || peopleCountBefore);
-      }
-      
-      // Cargar datos de proceso después
-      if (project.roiData.processAfter) {
-        setMinutesAfter(project.roiData.processAfter.minutes || minutesAfter);
-        setFrequencyTypeAfter(project.roiData.processAfter.frequencyType || frequencyTypeAfter);
-        setFrequencyValueAfter(project.roiData.processAfter.frequencyValue || frequencyValueAfter);
-        setPeopleCountAfter(project.roiData.processAfter.peopleCount || peopleCountAfter);
-      }
-      
-      // Cargar configuración de adopción
-      if (project.roiData.adoption) {
-        setAdoptionCurveType(project.roiData.adoption.curveType || adoptionCurveType);
-        setInflectionPoint(project.roiData.adoption.inflectionPoint || inflectionPoint);
-      }
-    }
-  }, [project]);
-  
-  // Función debounced para actualizar el proyecto
-  const debouncedUpdateProject = useCallback(
-    debounce((projectId, roiData) => {
-      updateProject(projectId, { roiData });
-    }, 1000),
-    []
-  );
-  // Guardar datos en el proyecto cuando cambian los valores principales
-  useEffect(() => {
-    if (project && !isAutoPlaying && results.hoursSaved !== undefined) {
-      const roiData = {
-        fte: {
-          costPerYear: parseFloat(costPerYear),
-          timeUnitType,
-          timeUnitValue: parseFloat(timeUnitValue)
-        },
-        implementationCost: parseFloat(implementationCost),
-        processBefore: {
-          minutes: parseFloat(minutesBefore),
-          frequencyType: frequencyTypeBefore,
-          frequencyValue: parseInt(frequencyValueBefore),
-          peopleCount: parseInt(peopleCountBefore)
-        },
-        processAfter: {
-          minutes: parseFloat(minutesAfter),
-          frequencyType: frequencyTypeAfter,
-          frequencyValue: parseInt(frequencyValueAfter),
-          peopleCount: parseInt(peopleCountAfter)
-        },
-        adoption: {
-          curveType: adoptionCurveType,
-          inflectionPoint: parseInt(inflectionPoint)
-        },
-        results: {
-          hoursSaved: parseFloat(results.hoursSaved.toFixed(2)),
-          fteEquivalent: parseFloat(results.fteEquivalent.toFixed(3)),
-          moneySaved: parseFloat(results.moneySaved.toFixed(2)),
-          roi: parseFloat(results.roi.toFixed(2)),
-          paybackMonths: parseFloat(results.paybackMonths.toFixed(2)),
-          lastUpdated: new Date().toISOString()
-        }
-      };
-      
-      debouncedUpdateProject(projectId, roiData);
-    }
-  }, [
-    costPerYear, timeUnitType, timeUnitValue, 
-    implementationCost, 
-    minutesBefore, frequencyTypeBefore, frequencyValueBefore, peopleCountBefore,
-    minutesAfter, frequencyTypeAfter, frequencyValueAfter, peopleCountAfter,
-    adoptionCurveType, inflectionPoint,
-    results
-  ]);
-  
-  // Iniciar/detener la reproducción automática
-  useEffect(() => {
-    let intervalId;
-    
-    if (isAutoPlaying) {
-      intervalId = setInterval(() => {
-        setSelectedMonth(prev => {
-          const next = prev >= 12 ? 1 : prev + 1;
-          return next;
-        });
-      }, animationSpeed);
-    }
-    
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isAutoPlaying, animationSpeed]);
-  
-  // Alternar visibilidad de tooltips
-  const toggleTooltip = (tooltip) => {
-    setTooltips(prev => ({
-      ...prev,
-      [tooltip]: !prev[tooltip]
-    }));
+// Forma completa del estado vacío, alineada a la semilla de src/data/projects.js
+// (project.tools['roi-calculator'].data) y a lo que hoy vivía en la raíz del
+// proyecto como `project.roiData` (rescatado vía `legacy`).
+const DEFAULT_DATA = {
+  fte: {
+    costPerYear: 0,
+    timeUnitType: 'monthly', // 'daily' | 'weekly' | 'monthly'
+    timeUnitValue: 0,
+  },
+  implementationCost: 0,
+  processBefore: {
+    minutes: 0,
+    frequencyType: 'monthly',
+    frequencyValue: 0,
+    peopleCount: 1,
+  },
+  processAfter: {
+    minutes: 0,
+    frequencyType: 'monthly',
+    frequencyValue: 0,
+    peopleCount: 1,
+  },
+  adoption: {
+    curveType: 'linear', // 'linear' | 'exponential' | 'custom'
+    inflectionPoint: 6,
+  },
+};
+
+// El ejemplo de src/data/toolsData.js guarda sus campos en un solo nivel
+// (costPerYear, minutesBefore, frequencyTypeBefore...) mientras el estado de
+// esta herramienta es anidado (fte.costPerYear, processBefore.minutes...).
+// Se traduce aquí en vez de deformar el estado local.
+function adaptRoiExample(example, defaultData) {
+  return {
+    ...defaultData,
+    fte: {
+      costPerYear: example.costPerYear ?? defaultData.fte.costPerYear,
+      timeUnitType: example.timeUnitType ?? defaultData.fte.timeUnitType,
+      timeUnitValue: example.timeUnitValue ?? defaultData.fte.timeUnitValue,
+    },
+    implementationCost: example.implementationCost ?? defaultData.implementationCost,
+    processBefore: {
+      minutes: example.minutesBefore ?? defaultData.processBefore.minutes,
+      frequencyType: example.frequencyTypeBefore ?? defaultData.processBefore.frequencyType,
+      frequencyValue: example.frequencyValueBefore ?? defaultData.processBefore.frequencyValue,
+      peopleCount: example.peopleCountBefore ?? defaultData.processBefore.peopleCount,
+    },
+    processAfter: {
+      minutes: example.minutesAfter ?? defaultData.processAfter.minutes,
+      frequencyType: example.frequencyTypeAfter ?? defaultData.processAfter.frequencyType,
+      frequencyValue: example.frequencyValueAfter ?? defaultData.processAfter.frequencyValue,
+      peopleCount: example.peopleCountAfter ?? defaultData.processAfter.peopleCount,
+    },
+    adoption: defaultData.adoption,
   };
-  
-  // Íconos para tipos de frecuencia
-  const frequencyIcons = {
-    'daily': '📅',
-    'weekly': '📆',
-    'monthly': '🗓️',
-    'quarterly': '⏳',
-    'semiannual': '⏲️',
-    'annual': '🎯'
-  };
-  
-  // Opciones para velocidad de reproducción
-  const speedOptions = [
-    { label: "Lento", value: 5000, description: "5 segundos por mes" },
-    { label: "Medio", value: 3000, description: "3 segundos por mes" },
-    { label: "Rápido", value: 1500, description: "1.5 segundos por mes" }
-  ];
-    // Calcular porcentaje de adopción por mes según curva
-  const getAdoptionByMonth = () => {
-    // Calcular porcentaje de adopción por mes según curva
-    const result = [];
-    for (let i = 1; i <= 12; i++) {
-      let percentage;
-      switch (adoptionCurveType) {
-        case 'linear': percentage = (i / 12) * 100; break;
-        case 'exponential': {
-          const midpoint = inflectionPoint;
-          const steepness = 1.0;
-          percentage = 100 / (1 + Math.exp(-steepness * (i - midpoint)));
-          break;
-        }
-        case 'custom': {
-          const skew = inflectionPoint / 6;
-          percentage = 100 * Math.pow(i / 12, 1/skew);
-          break;
-        }
-        default: percentage = (i / 12) * 100;
-      }
-      result.push(Math.min(100, Math.max(0, percentage)));
-    }
-    return result;
-  };
-  
-  // Actualizar cálculos cuando cambian los valores de entrada
-  useEffect(() => {
-    // Calcular horas anuales basadas en unidad de tiempo
-    const annualHours = (() => {
-      switch (timeUnitType) {
-        case 'daily':
-          return timeUnitValue * 260; // 260 días laborables al año
-        case 'weekly':
-          return timeUnitValue * 52; // 52 semanas al año
-        case 'monthly':
-          return timeUnitValue * 12; // 12 meses al año
-        default:
-          return timeUnitValue * 12;
-      }
-    })();
-    
-    const costPerHour = costPerYear / annualHours;
-    
-    // Calcular frecuencia anual
-    const getAnnualFrequency = (type, value) => {
-      const factors = {
-        'daily': 365,
-        'weekly': 52,
-        'monthly': 12,
-        'quarterly': 4,
-        'semiannual': 2,
-        'annual': 1
-      };
-      return value * factors[type];
-    };
-    
-    // Calcular horas anuales para escenarios antes y después
-    const getProcessAnnualHours = (minutes, freqType, freqValue, people) => {
-      const hoursPerExecution = minutes / 60;
-      const executionsPerYear = getAnnualFrequency(freqType, freqValue);
-      return hoursPerExecution * executionsPerYear * people;
-    };
-    
-    const hoursBefore = getProcessAnnualHours(
-      minutesBefore, frequencyTypeBefore, frequencyValueBefore, peopleCountBefore
-    );
-    
-    const hoursAfter = getProcessAnnualHours(
-      minutesAfter, frequencyTypeAfter, frequencyValueAfter, peopleCountAfter
-    );
-    
-    const hoursSaved = hoursBefore - hoursAfter > 0 ? hoursBefore - hoursAfter : 0;
-    const fteEquivalent = hoursSaved / annualHours;
-    const moneySaved = hoursSaved * costPerHour;
-    const percentReduction = hoursBefore > 0 ? ((hoursBefore - hoursAfter) / hoursBefore * 100) : 0;
-    
-    // Cálculos de ROI y período de recuperación
-    const roi = implementationCost > 0 ? ((moneySaved - implementationCost) / implementationCost * 100) : 0;
-    const paybackMonths = implementationCost > 0 ? (implementationCost / (moneySaved / 12)) : 0;
-    
-    // Calcular porcentaje de adopción por mes según curva
-    const adoptionPercentages = (() => {
-      const result = [];
-      
-      for (let i = 1; i <= 12; i++) {
-        let percentage;
-        
-        switch (adoptionCurveType) {
-          case 'linear':
-            percentage = (i / 12) * 100;
-            break;
-          case 'exponential':
-            // Curva S basada en punto de inflexión
-            const midpoint = inflectionPoint;
-            const steepness = 1.0;
-            percentage = 100 / (1 + Math.exp(-steepness * (i - midpoint)));
-            break;
-          case 'custom':
-            // Curva personalizada basada en punto de inflexión
-            const skew = inflectionPoint / 6;
-            percentage = 100 * Math.pow(i / 12, 1/skew);
-            break;
-          default:
-            percentage = (i / 12) * 100;
-        }
-        
-        result.push(Math.min(100, Math.max(0, percentage))); // Asegurar entre 0-100%
-      }
-      
-      return result;
-    })();
-    
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    
-    // Paso 1: Crear datos de ahorro mensual básicos sin información de punto de equilibrio
-    const monthlySavingsBase = monthNames.map((month, i) => {
-      const monthIndex = i;
-      const adoptionPercentage = adoptionPercentages[monthIndex];
-      const adoptionFactor = adoptionPercentage / 100;
-      
-      // Calcular valores mensuales basados en adopción
-      const monthlyHours = (hoursSaved / 12) * adoptionFactor;
-      const monthlyFte = (fteEquivalent / 12) * adoptionFactor;
-      const monthlySaving = (moneySaved / 12) * adoptionFactor;
-      
-      // Calcular valores acumulados
-      let cumulativeHours = 0;
-      let cumulativeFte = 0;
-      let cumulativeSaving = 0;
-      
-      for (let j = 0; j <= monthIndex; j++) {
-        const prevAdoptionFactor = adoptionPercentages[j] / 100;
-        cumulativeHours += (hoursSaved / 12) * prevAdoptionFactor;
-        cumulativeFte += (fteEquivalent / 12) * prevAdoptionFactor;
-        cumulativeSaving += (moneySaved / 12) * prevAdoptionFactor;
-      }
-      
-      return {
-        month,
-        monthIndex: monthIndex + 1,
-        adoption: adoptionPercentage,
-        hours: monthlyHours,
-        fte: monthlyFte,
-        saving: monthlySaving,
-        cumulativeHours,
-        cumulativeFte,
-        cumulativeSaving,
-        isBreakEven: false // Valor predeterminado, se actualizará en el paso 2
-      };
-    });
-    
-    // Paso 2: Encontrar el punto de equilibrio y crear el array final
-    let breakEvenMonthIndex = -1;
-    
-    for (let i = 0; i < monthlySavingsBase.length; i++) {
-      if (monthlySavingsBase[i].cumulativeSaving >= implementationCost) {
-        breakEvenMonthIndex = i;
+}
+
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const TIME_UNIT_LABELS = { daily: 'Horas diarias', weekly: 'Horas semanales', monthly: 'Horas mensuales' };
+const ANNUAL_WORK_HOURS_FACTOR = { daily: 260, weekly: 52, monthly: 12 };
+
+const FREQUENCY_LABELS = {
+  daily: 'Diario',
+  weekly: 'Semanal',
+  monthly: 'Mensual',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+};
+const FREQUENCY_SUFFIX = {
+  daily: 'al día',
+  weekly: 'a la semana',
+  monthly: 'al mes',
+  quarterly: 'al trimestre',
+  semiannual: 'al semestre',
+  annual: 'al año',
+};
+const ANNUAL_FREQUENCY_FACTOR = { daily: 365, weekly: 52, monthly: 12, quarterly: 4, semiannual: 2, annual: 1 };
+
+const ANIMATION_INTERVAL_MS = 2500;
+
+function annualHoursFromFte(timeUnitType, timeUnitValue) {
+  const factor = ANNUAL_WORK_HOURS_FACTOR[timeUnitType] ?? ANNUAL_WORK_HOURS_FACTOR.monthly;
+  return (Number(timeUnitValue) || 0) * factor;
+}
+
+function processAnnualHours(minutes, frequencyType, frequencyValue, peopleCount) {
+  const hoursPerExecution = (Number(minutes) || 0) / 60;
+  const executionsPerYear = (Number(frequencyValue) || 0) * (ANNUAL_FREQUENCY_FACTOR[frequencyType] ?? ANNUAL_FREQUENCY_FACTOR.monthly);
+  return hoursPerExecution * executionsPerYear * (Number(peopleCount) || 0);
+}
+
+function adoptionByMonth(curveType, inflectionPoint) {
+  const percentages = [];
+  for (let month = 1; month <= 12; month += 1) {
+    let percentage;
+    switch (curveType) {
+      case 'exponential':
+        percentage = 100 / (1 + Math.exp(-1 * (month - inflectionPoint)));
+        break;
+      case 'custom': {
+        const skew = inflectionPoint / 6 || 1;
+        percentage = 100 * Math.pow(month / 12, 1 / skew);
         break;
       }
+      case 'linear':
+      default:
+        percentage = (month / 12) * 100;
     }
-    
-    // Crear el array final de ahorros mensuales con información de punto de equilibrio
-    const monthlySavings = monthlySavingsBase.map((data, i) => {
-      return {
-        ...data,
-        isBreakEven: i === breakEvenMonthIndex
-      };
-    });
-    
-    // El mes de equilibrio (si existe)
-    const breakEvenMonth = breakEvenMonthIndex !== -1 ? monthlySavings[breakEvenMonthIndex] : null;
-    
-    // Repartir el beneficio en ahorro (35%) e ingreso (65%)
-    const annualSavings = moneySaved * 0.35;
-    const annualRevenue = moneySaved * 0.65;
-    
-    // Actualizar el estado de resultados
-    setResults({
-      annualHours,
-      costPerHour,
-      hoursBefore,
-      hoursAfter,
-      hoursSaved,
-      fteEquivalent,
-      moneySaved,
-      percentReduction,
-      roi,
-      paybackMonths,
-      adoptionPercentages,
-      monthlySavings,
-      breakEvenMonth,
-      annualSavings,
-      annualRevenue
-    });
-    
-  }, [
-    timeUnitType, 
-    timeUnitValue, 
-    costPerYear,
-    minutesBefore, 
-    frequencyTypeBefore, 
-    frequencyValueBefore, 
-    peopleCountBefore,
-    minutesAfter, 
-    frequencyTypeAfter, 
-    frequencyValueAfter, 
-    peopleCountAfter,
-    implementationCost,
-    adoptionCurveType,
-    inflectionPoint
-  ]);
-  
-  // Cálculos de ROI y período de recuperación
-  const roi = implementationCost > 0 ? ((results.moneySaved - implementationCost) / implementationCost * 100) : 0;
-  const paybackMonths = implementationCost > 0 ? (implementationCost / (results.moneySaved / 12)) : 0;
-  
-  // Calcular datos de ahorro mensual con curva de adopción
-  const adoptionPercentages = getAdoptionByMonth();
-  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  
-  // Paso 1: Crear datos de ahorro mensual básicos sin información de punto de equilibrio
-  const monthlySavingsBase = monthNames.map((month, i) => {
-    const monthIndex = i;
-    const adoptionPercentage = adoptionPercentages[monthIndex];
-    const adoptionFactor = adoptionPercentage / 100;
-    
-    // Calcular valores mensuales basados en adopción
+    percentages.push(Math.min(100, Math.max(0, percentage)));
+  }
+  return percentages;
+}
+
+/**
+ * Toda la matemática del ROI en un único lugar, puro y derivado de `data`.
+ * Antes vivía duplicada: una copia dentro de un useEffect que escribía a un
+ * `useState` separado (y cuyas variables internas la JSX referenciaba sin
+ * que existieran en su alcance — el componente literalmente no podía
+ * renderizar), y otra copia casi idéntica fuera del efecto. Se unifica aquí.
+ */
+function calculateRoi(data) {
+  const { fte, implementationCost, processBefore, processAfter, adoption } = data;
+
+  const annualHours = annualHoursFromFte(fte.timeUnitType, fte.timeUnitValue);
+  const costPerHour = annualHours > 0 ? fte.costPerYear / annualHours : 0;
+
+  const hoursBefore = processAnnualHours(
+    processBefore.minutes,
+    processBefore.frequencyType,
+    processBefore.frequencyValue,
+    processBefore.peopleCount
+  );
+  const hoursAfter = processAnnualHours(
+    processAfter.minutes,
+    processAfter.frequencyType,
+    processAfter.frequencyValue,
+    processAfter.peopleCount
+  );
+  const hoursSaved = Math.max(0, hoursBefore - hoursAfter);
+  const fteEquivalent = annualHours > 0 ? hoursSaved / annualHours : 0;
+  const moneySaved = hoursSaved * costPerHour;
+  const percentReduction = hoursBefore > 0 ? ((hoursBefore - hoursAfter) / hoursBefore) * 100 : 0;
+
+  const roi = implementationCost > 0 ? ((moneySaved - implementationCost) / implementationCost) * 100 : 0;
+  const paybackMonths = implementationCost > 0 && moneySaved > 0 ? implementationCost / (moneySaved / 12) : 0;
+
+  const adoptionPercentages = adoptionByMonth(adoption.curveType, adoption.inflectionPoint);
+
+  let cumulativeHours = 0;
+  let cumulativeFte = 0;
+  let cumulativeSaving = 0;
+  let breakEvenMonthIndex = -1;
+
+  const monthlySavings = MONTH_NAMES.map((month, index) => {
+    const adoptionFactor = adoptionPercentages[index] / 100;
     const monthlyHours = (hoursSaved / 12) * adoptionFactor;
     const monthlyFte = (fteEquivalent / 12) * adoptionFactor;
     const monthlySaving = (moneySaved / 12) * adoptionFactor;
-    
-    // Calcular valores acumulados
-    let cumulativeHours = 0;
-    let cumulativeFte = 0;
-    let cumulativeSaving = 0;
-    
-    for (let j = 0; j <= monthIndex; j++) {
-      const prevAdoptionFactor = adoptionPercentages[j] / 100;
-      cumulativeHours += (hoursSaved / 12) * prevAdoptionFactor;
-      cumulativeFte += (fteEquivalent / 12) * prevAdoptionFactor;
-      cumulativeSaving += (moneySaved / 12) * prevAdoptionFactor;
+
+    cumulativeHours += monthlyHours;
+    cumulativeFte += monthlyFte;
+    cumulativeSaving += monthlySaving;
+
+    if (breakEvenMonthIndex === -1 && implementationCost > 0 && cumulativeSaving >= implementationCost) {
+      breakEvenMonthIndex = index;
     }
-    
+
     return {
       month,
-      monthIndex: monthIndex + 1,
-      adoption: adoptionPercentage,
+      monthIndex: index + 1,
+      adoption: adoptionPercentages[index],
       hours: monthlyHours,
       fte: monthlyFte,
       saving: monthlySaving,
       cumulativeHours,
       cumulativeFte,
       cumulativeSaving,
-      isBreakEven: false // Valor predeterminado, se actualizará en el paso 2
     };
   });
-  
-  // Paso 2: Encontrar el punto de equilibrio y crear el array final
-  let breakEvenMonthIndex = -1;
-  
-  for (let i = 0; i < monthlySavingsBase.length; i++) {
-    if (monthlySavingsBase[i].cumulativeSaving >= implementationCost) {
-      breakEvenMonthIndex = i;
-      break;
-    }
-  }
-  
-  // Crear el array final de ahorros mensuales con información de punto de equilibrio
-  const monthlySavings = monthlySavingsBase.map((data, i) => {
-    return {
-      ...data,
-      isBreakEven: i === breakEvenMonthIndex
-    };
-  });
-  
-  // Obtener datos del mes seleccionado actualmente
-  const currentMonthData = monthlySavings[selectedMonth - 1];
-  
-  // El mes de equilibrio (si existe)
+
   const breakEvenMonth = breakEvenMonthIndex !== -1 ? monthlySavings[breakEvenMonthIndex] : null;
-  
-  // Formatear número con comas
-  const formatNumber = (num) => {
-    return new Intl.NumberFormat().format(Math.round(num));
+
+  return {
+    annualHours,
+    costPerHour,
+    hoursBefore,
+    hoursAfter,
+    hoursSaved,
+    fteEquivalent,
+    moneySaved,
+    percentReduction,
+    roi,
+    paybackMonths,
+    monthlySavings,
+    breakEvenMonth,
+    annualSavings: moneySaved * 0.35,
+    annualRevenue: moneySaved * 0.65,
   };
-  
-  // Formatear número con decimales
-  const formatDecimal = (num, decimals = 1) => {
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    }).format(num);
-  };
-  
-  // Convertir colones a dólares
-  const colToDollars = (colones) => {
-    return colones / exchangeRate;
-  };
-  
-  // Repartir el beneficio en ahorro (35%) e ingreso (65%)
-  const calculateSavingsAndRevenue = (totalBenefit) => {
-    const savings = totalBenefit * 0.35;
-    const revenue = totalBenefit * 0.65;
-    return { savings, revenue };
-  };
-  
-  // Si no hay proyecto, no mostrar nada
-  if (!project) {
-    return <div className="p-6 text-center">Cargando datos del proyecto...</div>;
-  }
-  
-  // Función para guardar manualmente
-  const handleSaveData = () => {
-    if (project) {
-      const roiData = {
-        fte: {
-          costPerYear: parseFloat(costPerYear),
-          timeUnitType,
-          timeUnitValue: parseFloat(timeUnitValue)
-        },
-        implementationCost: parseFloat(implementationCost),
-        processBefore: {
-          minutes: parseFloat(minutesBefore),
-          frequencyType: frequencyTypeBefore,
-          frequencyValue: parseInt(frequencyValueBefore),
-          peopleCount: parseInt(peopleCountBefore)
-        },
-        processAfter: {
-          minutes: parseFloat(minutesAfter),
-          frequencyType: frequencyTypeAfter,
-          frequencyValue: parseInt(frequencyValueAfter),
-          peopleCount: parseInt(peopleCountAfter)
-        },
-        adoption: {
-          curveType: adoptionCurveType,
-          inflectionPoint: parseInt(inflectionPoint)
-        },
-        results: {
-          hoursSaved: parseFloat(results.hoursSaved.toFixed(2)),
-          fteEquivalent: parseFloat(results.fteEquivalent.toFixed(3)),
-          moneySaved: parseFloat(results.moneySaved.toFixed(2)),
-          roi: parseFloat(results.roi.toFixed(2)),
-          paybackMonths: parseFloat(results.paybackMonths.toFixed(2)),
-          lastUpdated: new Date().toISOString()
-        }
-      };
-      
-      updateProject(projectId, { roiData });
-      setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 3000);
+}
+
+export default function RoiCalculator({ projectId }) {
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, {
+    adaptExample: adaptRoiExample,
+    legacy: (p) => p.roiData || null,
+  });
+  const shouldReduceMotion = useReducedMotion();
+
+  const [exampleMode, setExampleMode] = useState(false);
+  const [confirmKind, setConfirmKind] = useState(null); // 'example' | 'discard' | null
+  const exampleSnapshotRef = useRef(null);
+
+  const [formStarted, setFormStarted] = useState(false);
+  const [tooltip, setTooltip] = useState(null); // 'fte' | 'roi' | 'hourCost' | null
+  const [selectedMonth, setSelectedMonth] = useState(12);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!isAutoPlaying) return undefined;
+    const id = setInterval(() => {
+      setSelectedMonth((prev) => (prev >= 12 ? 1 : prev + 1));
+    }, ANIMATION_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isAutoPlaying]);
+
+  const calc = useMemo(() => calculateRoi(t.data), [t.data]);
+
+  if (!t.ready) return null;
+
+  const { fte, implementationCost, processBefore, processAfter } = t.data;
+  const hasMeaningfulData =
+    fte.costPerYear > 0 || implementationCost > 0 || processBefore.minutes > 0 || processAfter.minutes > 0;
+  const isEmpty = !hasMeaningfulData && !formStarted;
+  const currentMonthData = calc.monthlySavings[selectedMonth - 1];
+
+  // --- Edición de campos ---------------------------------------------------
+  const patchFte = (partial) => t.setData((prev) => ({ ...prev, fte: { ...prev.fte, ...partial } }));
+  const patchProcessBefore = (partial) =>
+    t.setData((prev) => ({ ...prev, processBefore: { ...prev.processBefore, ...partial } }));
+  const patchProcessAfter = (partial) =>
+    t.setData((prev) => ({ ...prev, processAfter: { ...prev.processAfter, ...partial } }));
+
+  // --- Modo ejemplo --------------------------------------------------------
+  const openExample = () => {
+    if (t.isDirty) {
+      setConfirmKind('example');
+      return;
     }
+    applyExample();
   };
 
+  const applyExample = () => {
+    exampleSnapshotRef.current = t.data;
+    const applied = t.loadExample(0);
+    if (applied) {
+      setExampleMode(true);
+      setFormStarted(true);
+    }
+    setConfirmKind(null);
+  };
+
+  const adoptExample = () => {
+    t.save();
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  const discardExample = () => {
+    if (exampleSnapshotRef.current) t.setData(exampleSnapshotRef.current);
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  // --- Cancelar / descartar cambios ----------------------------------------
+  const requestDiscard = () => {
+    if (!t.isDirty) return;
+    setConfirmKind('discard');
+  };
+
+  const confirmDiscard = () => {
+    t.discard();
+    setConfirmKind(null);
+  };
+
+  const exampleTitle = t.exampleTitles?.[0] || 'Ejemplo';
+
   return (
-    <div className="roi-calculator bg-gray-50 dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-      <div className="p-4 bg-blue-600 dark:bg-blue-800 text-white flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold flex items-center">
-            <DollarSign className="mr-2" />
-            Calculadora de ROI
-          </h2>
-          <p className="text-sm opacity-80">
-            Calcula el retorno de inversión y tiempo de recuperación para este proyecto
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          {showSaveSuccess && (
-            <span className="text-sm bg-green-500 text-white px-3 py-1 rounded-md animate-fade-in-out">
-              ¡Guardado con éxito!
-            </span>
+    <div className="p-4 sm:p-6">
+      {/* Barra de estado + acciones */}
+      <div className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus tool={t} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && (
+            <GradientButton
+              variant="outline"
+              size="sm"
+              onClick={openExample}
+              leadingIcon={<Eye size={14} aria-hidden="true" />}
+            >
+              Ver un ejemplo
+            </GradientButton>
           )}
-          <button
-            onClick={handleSaveData}
-            className="flex items-center px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+          {t.isDirty && (
+            <GradientButton variant="ghost" size="sm" onClick={requestDiscard}>
+              Cancelar
+            </GradientButton>
+          )}
+          <GradientButton
+            variant="success"
+            size="sm"
+            disabled={!t.isDirty || t.isSaving}
+            onClick={() => t.save()}
+            leadingIcon={t.isSaving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
           >
-            <Save size={16} className="mr-2" />
             Guardar
-          </button>
+          </GradientButton>
         </div>
       </div>
-      
-      <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Panel de Configuración FTE */}
-          <div className="bg-white dark:bg-gray-700 p-4 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm">
-            <h4 className="font-semibold text-lg mb-4 text-gray-800 dark:text-gray-200 flex items-center pb-2 border-b border-gray-100 dark:border-gray-600">
-              <div className="bg-blue-100 dark:bg-blue-800 p-2 rounded-full mr-3">
-                <User className="text-blue-600 dark:text-blue-300" size={18} />
-              </div>
-              Configuración FTE
-            </h4>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Costo anual de un FTE ($)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                <input 
-                  type="number" 
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                  value={Math.round(colToDollars(costPerYear))}
-                  onChange={(e) => setCostPerYear(e.target.value * exchangeRate)}
-                />
-              </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Incluya salario bruto y cargas sociales
-              </div>
+
+      {/* Banner de modo ejemplo */}
+      <AnimatePresence>
+        {exampleMode && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.base}
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="rounded-full bg-info px-2 py-0.5 text-xs font-medium text-white">Ejemplo</span>
+              <span className="font-medium text-content">{exampleTitle}</span>
+              <span className="text-content-secondary">
+                Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.
+              </span>
             </div>
-            
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                  Jornada laboral
-                </label>
-                <div className="relative inline-block">
-                  <button 
-                    onClick={() => toggleTooltip('fte')}
-                    className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                  >
-                    <HelpCircle size={16} />
-                  </button>
-                  {tooltips.fte && (
-                    <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg text-xs text-gray-600 dark:text-gray-300 z-10">
-                      <p>Un FTE (Full-Time Equivalent) equivale a un empleado trabajando a tiempo completo durante un año.</p>
-                      <div className="absolute bottom-0 right-3 transform translate-y-1/2 rotate-45 w-2 h-2 bg-white dark:bg-gray-700 border-r border-b border-gray-200 dark:border-gray-600"></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <select 
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 bg-white dark:bg-gray-800 dark:text-gray-200"
-                  value={timeUnitType}
-                  onChange={(e) => setTimeUnitType(e.target.value)}
-                >
-                  <option value="daily">Horas diarias</option>
-                  <option value="weekly">Horas semanales</option>
-                  <option value="monthly">Horas mensuales</option>
-                </select>
-                <input 
-                  type="number" 
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                  value={timeUnitValue}
-                  step="0.5" 
-                  min="0"
-                  onChange={(e) => setTimeUnitValue(Number(e.target.value))}
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <GradientButton variant="outline" size="sm" onClick={discardExample} leadingIcon={<Undo2 size={14} aria-hidden="true" />}>
+                Deshacer
+              </GradientButton>
+              <GradientButton variant="solid" size="sm" onClick={adoptExample}>
+                Usar como punto de partida
+              </GradientButton>
             </div>
-            
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                  Costo de implementación ($)
-                </label>
-                <div className="relative inline-block">
-                  <button 
-                    onClick={() => toggleTooltip('roi')}
-                    className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                  >
-                    <HelpCircle size={16} />
-                  </button>
-                  {tooltips.roi && (
-                    <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg text-xs text-gray-600 dark:text-gray-300 z-10">
-                      <p>El costo estimado de implementar la mejora. Se usa para calcular el ROI y tiempo de recuperación.</p>
-                      <div className="absolute bottom-0 right-3 transform translate-y-1/2 rotate-45 w-2 h-2 bg-white dark:bg-gray-700 border-r border-b border-gray-200 dark:border-gray-600"></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                <input 
-                  type="number" 
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                  value={Math.round(colToDollars(implementationCost))}
-                  onChange={(e) => setImplementationCost(e.target.value * exchangeRate)}
-                />
-              </div>
-            </div>
-            
-            <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-600">
-              <div className="flex justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Horas anuales:
-                </label>
-                <span className="font-semibold text-blue-600 dark:text-blue-400">
-                  {formatNumber(annualHours)} horas
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Costo por hora:
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={exampleMode ? 'space-y-6 rounded-xl ring-1 ring-info/30 p-1' : 'space-y-6'}>
+        {isEmpty ? (
+          <EmptyState
+            title="Traduce la mejora a colones"
+            description="Ingresa costos y beneficios para calcular retorno y periodo de recuperación."
+            action={
+              <GradientButton onClick={() => setFormStarted(true)} leadingIcon={<Plus size={16} aria-hidden="true" />}>
+                Ingresar costos
+              </GradientButton>
+            }
+            secondaryAction={
+              t.hasExamples && (
+                <GradientButton variant="outline" onClick={openExample}>
+                  Ver un ejemplo
+                </GradientButton>
+              )
+            }
+          />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {/* Panel de Configuración FTE */}
+              <div className="rounded-xl border border-line bg-surface p-4 shadow-xs">
+                <h4 className="mb-4 flex items-center border-b border-line-subtle pb-2 text-lg font-semibold text-content">
+                  <div className="mr-3 rounded-full bg-info-soft p-2">
+                    <User className="text-info-on" size={18} aria-hidden="true" />
+                  </div>
+                  Configuración FTE
+                </h4>
+
+                <div className="mb-4">
+                  <label className="mb-1 block text-sm font-medium text-content-secondary" htmlFor="roi-cost-per-year">
+                    Costo anual de un FTE (₡)
                   </label>
-                  <div className="relative inline-block ml-1">
-                    <button 
-                      onClick={() => toggleTooltip('hourCost')}
-                      className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted">₡</span>
+                    <input
+                      id="roi-cost-per-year"
+                      type="number"
+                      min="0"
+                      className="input pl-8 tabular-nums"
+                      value={fte.costPerYear}
+                      onChange={(e) => patchFte({ costPerYear: Math.max(0, Number(e.target.value) || 0) })}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-content-muted">Incluya salario bruto y cargas sociales</div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <label className="mb-1 block text-sm font-medium text-content-secondary">Jornada laboral</label>
+                    <div className="relative inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setTooltip((v) => (v === 'fte' ? null : 'fte'))}
+                        className="text-content-muted hover:text-content-secondary"
+                        aria-label="Qué es un FTE"
+                      >
+                        <HelpCircle size={16} aria-hidden="true" />
+                      </button>
+                      {tooltip === 'fte' && (
+                        <div className="absolute right-0 bottom-full z-10 mb-2 w-64 rounded-lg border border-line bg-surface-raised p-3 text-xs text-content-secondary shadow-lg">
+                          <p>Un FTE (Full-Time Equivalent) equivale a un empleado trabajando a tiempo completo durante un año.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      className="input appearance-none"
+                      value={fte.timeUnitType}
+                      onChange={(e) => patchFte({ timeUnitType: e.target.value })}
+                      aria-label="Unidad de la jornada laboral"
                     >
-                      <HelpCircle size={14} />
-                    </button>
-                    {tooltips.hourCost && (
-                      <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg text-xs text-gray-600 dark:text-gray-300 z-10">
-                        <p>Costo anual total dividido entre las horas laborables al año.</p>
-                        <div className="absolute bottom-0 left-3 transform translate-y-1/2 rotate-45 w-2 h-2 bg-white dark:bg-gray-700 border-r border-b border-gray-200 dark:border-gray-600"></div>
-                      </div>
-                    )}
+                      {Object.entries(TIME_UNIT_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="input tabular-nums"
+                      value={fte.timeUnitValue}
+                      onChange={(e) => patchFte({ timeUnitValue: Math.max(0, Number(e.target.value) || 0) })}
+                      aria-label="Valor de la jornada laboral"
+                    />
                   </div>
                 </div>
-                <span className="font-semibold text-blue-600 dark:text-blue-400">
-                  ${formatDecimal(colToDollars(costPerHour), 2)}
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Panel de Proceso Antes */}
-          <div className="bg-white dark:bg-gray-700 p-4 rounded-xl border border-red-200 dark:border-red-900/30 shadow-sm">
-            <h4 className="font-semibold text-lg mb-4 text-gray-800 dark:text-gray-200 flex items-center pb-2 border-b border-red-100 dark:border-red-900/20">
-              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full mr-3">
-                <Clock className="text-red-600 dark:text-red-400" size={18} />
-              </div>
-              Antes de mejorar
-            </h4>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Minutos por ejecución
-              </label>
-              <div className="relative">
-                <input 
-                  type="number" 
-                  className="w-full pl-10 pr-3 py-2 border border-red-200 dark:border-red-900/30 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                  value={minutesBefore}
-                  step="0.5"
-                  min="0"
-                  onChange={(e) => setMinutesBefore(Number(e.target.value))}
-                />
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-red-400 dark:text-red-300 text-sm">min</span>
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Frecuencia de ejecución
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <select 
-                  className="pl-9 pr-3 py-2 border border-red-200 dark:border-red-900/30 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-500/30 bg-white dark:bg-gray-800 dark:text-gray-200 appearance-none"
-                  value={frequencyTypeBefore}
-                  onChange={(e) => setFrequencyTypeBefore(e.target.value)}
-                >
-                  {Object.entries({
-                    'daily': 'Diario',
-                    'weekly': 'Semanal',
-                    'monthly': 'Mensual',
-                    'quarterly': 'Trimestral',
-                    'semiannual': 'Semestral',
-                    'annual': 'Anual'
-                  }).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    className="w-full px-3 py-2 border border-red-200 dark:border-red-900/30 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                    value={frequencyValueBefore}
-                    min="1"
-                    onChange={(e) => setFrequencyValueBefore(Number(e.target.value))}
-                  />
-                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-400 dark:text-red-300 text-sm">veces</span>
+
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <label className="mb-1 block text-sm font-medium text-content-secondary" htmlFor="roi-implementation-cost">
+                      Costo de implementación (₡)
+                    </label>
+                    <div className="relative inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setTooltip((v) => (v === 'roi' ? null : 'roi'))}
+                        className="text-content-muted hover:text-content-secondary"
+                        aria-label="Qué es el costo de implementación"
+                      >
+                        <HelpCircle size={16} aria-hidden="true" />
+                      </button>
+                      {tooltip === 'roi' && (
+                        <div className="absolute right-0 bottom-full z-10 mb-2 w-64 rounded-lg border border-line bg-surface-raised p-3 text-xs text-content-secondary shadow-lg">
+                          <p>El costo estimado de implementar la mejora. Se usa para calcular el ROI y tiempo de recuperación.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted">₡</span>
+                    <input
+                      id="roi-implementation-cost"
+                      type="number"
+                      min="0"
+                      className="input pl-8 tabular-nums"
+                      value={implementationCost}
+                      onChange={(e) => t.patch({ implementationCost: Math.max(0, Number(e.target.value) || 0) })}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 border-t border-line-subtle pt-4">
+                  <div className="mb-2 flex justify-between">
+                    <span className="text-sm font-medium text-content-secondary">Horas anuales:</span>
+                    <span className="font-semibold tabular-nums text-info-on">{formatNumber(calc.annualHours)} horas</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-content-secondary">Costo por hora:</span>
+                      <div className="relative ml-1 inline-block">
+                        <button
+                          type="button"
+                          onClick={() => setTooltip((v) => (v === 'hourCost' ? null : 'hourCost'))}
+                          className="text-content-muted hover:text-content-secondary"
+                          aria-label="Cómo se calcula el costo por hora"
+                        >
+                          <HelpCircle size={14} aria-hidden="true" />
+                        </button>
+                        {tooltip === 'hourCost' && (
+                          <div className="absolute left-0 bottom-full z-10 mb-2 w-64 rounded-lg border border-line bg-surface-raised p-3 text-xs text-content-secondary shadow-lg">
+                            <p>Costo anual total dividido entre las horas laborables al año.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="font-semibold tabular-nums text-info-on">{formatCurrency(calc.costPerHour, 'CRC')}</span>
+                  </div>
                 </div>
               </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {frequencyValueBefore} {frequencyValueBefore === 1 ? 'vez' : 'veces'} {
-                  frequencyTypeBefore === 'daily' ? 'al día' :
-                  frequencyTypeBefore === 'weekly' ? 'a la semana' :
-                  frequencyTypeBefore === 'monthly' ? 'al mes' :
-                  frequencyTypeBefore === 'quarterly' ? 'al trimestre' :
-                  frequencyTypeBefore === 'semiannual' ? 'al semestre' : 'al año'
-                }
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Número de personas
-              </label>
-              <input 
-                type="number" 
-                className="w-full px-3 py-2 border border-red-200 dark:border-red-900/30 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                value={peopleCountBefore}
-                min="1"
-                onChange={(e) => setPeopleCountBefore(Number(e.target.value))}
+
+              {/* Panel de Proceso Antes */}
+              <ProcessPanel
+                tone="danger"
+                title="Antes de mejorar"
+                icon={<Clock className="text-danger-on" size={18} aria-hidden="true" />}
+                process={processBefore}
+                onChange={patchProcessBefore}
+                annualHours={calc.hoursBefore}
+              />
+
+              {/* Panel de Proceso Después */}
+              <ProcessPanel
+                tone="success"
+                title="Después de mejorar"
+                icon={<TrendingUp className="text-success-on" size={18} aria-hidden="true" />}
+                process={processAfter}
+                onChange={patchProcessAfter}
+                annualHours={calc.hoursAfter}
               />
             </div>
-            
-            <div className="mt-5 pt-4 border-t border-red-100 dark:border-red-900/20">
-              <div className="flex justify-between">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Horas anuales:
-                </label>
-                <span className="font-bold text-red-600 dark:text-red-400">
-                  {formatNumber(hoursBefore)} horas
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Panel de Proceso Después */}
-          <div className="bg-white dark:bg-gray-700 p-4 rounded-xl border border-green-200 dark:border-green-900/30 shadow-sm">
-            <h4 className="font-semibold text-lg mb-4 text-gray-800 dark:text-gray-200 flex items-center pb-2 border-b border-green-100 dark:border-green-900/20">
-              <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full mr-3">
-                <TrendingUp className="text-green-600 dark:text-green-400" size={18} />
-              </div>
-              Después de mejorar
-            </h4>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Minutos por ejecución
-              </label>
-              <div className="relative">
-                <input 
-                  type="number" 
-                  className="w-full pl-10 pr-3 py-2 border border-green-200 dark:border-green-900/30 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                  value={minutesAfter}
-                  step="0.5"
-                  min="0"
-                  onChange={(e) => setMinutesAfter(Number(e.target.value))}
-                />
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-400 dark:text-green-300 text-sm">min</span>
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Frecuencia de ejecución
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <select 
-                  className="pl-9 pr-3 py-2 border border-green-200 dark:border-green-900/30 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-500/30 bg-white dark:bg-gray-800 dark:text-gray-200 appearance-none"
-                  value={frequencyTypeAfter}
-                  onChange={(e) => setFrequencyTypeAfter(e.target.value)}
-                >
-                  {Object.entries({
-                    'daily': 'Diario',
-                    'weekly': 'Semanal',
-                    'monthly': 'Mensual',
-                    'quarterly': 'Trimestral',
-                    'semiannual': 'Semestral',
-                    'annual': 'Anual'
-                  }).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    className="w-full px-3 py-2 border border-green-200 dark:border-green-900/30 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                    value={frequencyValueAfter}
-                    min="1"
-                    onChange={(e) => setFrequencyValueAfter(Number(e.target.value))}
+
+            {/* Sección de Resultados */}
+            <div className="rounded-xl border border-line bg-surface-sunken p-6">
+              <h4 className="mb-6 flex items-center text-xl font-semibold text-content">
+                <BarChart2 className="mr-2" aria-hidden="true" />
+                Resultados del proyecto
+              </h4>
+
+              <div className="mb-8">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium text-content-secondary">Reducción de tiempo</span>
+                  <span className="text-2xl font-bold tabular-nums text-brand">{formatPercent(calc.percentReduction, 0)}</span>
+                </div>
+                <div className="h-4 overflow-hidden rounded-full bg-danger-soft">
+                  <div
+                    className="h-full rounded-full bg-brand transition-all duration-1000 ease-out"
+                    style={{ width: `${Math.min(100, Math.max(0, calc.percentReduction))}%` }}
                   />
-                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-400 dark:text-green-300 text-sm">veces</span>
+                </div>
+                <div className="mt-2 flex justify-between text-xs tabular-nums text-content-muted">
+                  <span>Proceso original: {formatNumber(calc.hoursBefore)} horas/año</span>
+                  <span>Proceso optimizado: {formatNumber(calc.hoursAfter)} horas/año</span>
                 </div>
               </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {frequencyValueAfter} {frequencyValueAfter === 1 ? 'vez' : 'veces'} {
-                  frequencyTypeAfter === 'daily' ? 'al día' :
-                  frequencyTypeAfter === 'weekly' ? 'a la semana' :
-                  frequencyTypeAfter === 'monthly' ? 'al mes' :
-                  frequencyTypeAfter === 'quarterly' ? 'al trimestre' :
-                  frequencyTypeAfter === 'semiannual' ? 'al semestre' : 'al año'
-                }
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                Número de personas
-              </label>
-              <input 
-                type="number" 
-                className="w-full px-3 py-2 border border-green-200 dark:border-green-900/30 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-500/30 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                value={peopleCountAfter}
-                min="1"
-                onChange={(e) => setPeopleCountAfter(Number(e.target.value))}
-              />
-            </div>
-            
-            <div className="mt-5 pt-4 border-t border-green-100 dark:border-green-900/20">
-              <div className="flex justify-between">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Horas anuales:
-                </label>
-                <span className="font-bold text-green-600 dark:text-green-400">
-                  {formatNumber(hoursAfter)} horas
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Sección de Resultados */}
-        <div className="mt-8 p-6 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-xl border border-blue-200 dark:border-blue-800/30 shadow-sm">
-          <h4 className="font-semibold text-xl mb-6 text-gray-800 dark:text-gray-200 flex items-center">
-            <BarChart2 className="mr-2" />
-            Resultados del Proyecto
-          </h4>
-          
-          {/* Barra de progreso mostrando la reducción */}
-          <div className="mb-8">
-            <div className="flex justify-between mb-2 items-center">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Reducción de tiempo</span>
-              <span className="font-bold text-2xl text-blue-600 dark:text-blue-400">{percentReduction.toFixed(0)}%</span>
-            </div>
-            <div className="h-4 bg-red-100 dark:bg-red-900/20 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-green-500 to-blue-500 dark:from-green-400 dark:to-blue-400 rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${percentReduction > 100 ? 100 : percentReduction}%` }}
-              >
-              </div>
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>Proceso original: {formatNumber(hoursBefore)} horas/año</span>
-              <span>Proceso optimizado: {formatNumber(hoursAfter)} horas/año</span>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <div className="bg-white dark:bg-gray-700 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600">
-              <div className="text-center">
-                <div className="text-gray-600 dark:text-gray-400 text-sm mb-1">Horas ahorradas</div>
-                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{formatNumber(hoursSaved)}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  horas/año
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white dark:bg-gray-700 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600">
-              <div className="text-center">
-                <div className="text-gray-600 dark:text-gray-400 text-sm mb-1">FTE equivalentes</div>
-                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(fteEquivalent)}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  personal tiempo completo
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white dark:bg-gray-700 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600">
-              <div className="text-center">
-                <div className="text-gray-600 dark:text-gray-400 text-sm mb-1">ROI primer año</div>
-                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(roi > 0 ? roi : 0)}%</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  retorno de inversión
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white dark:bg-gray-700 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600">
-              <div className="text-center">
-                <div className="text-gray-600 dark:text-gray-400 text-sm mb-1">Tiempo de recuperación</div>
-                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatDecimal(paybackMonths)} <span className="text-sm font-normal">meses</span>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {paybackMonths <= 8 ? 
-                    <span className="text-green-500 dark:text-green-400">✓ Inferior a 8 meses</span> : 
-                    <span className="text-yellow-500 dark:text-yellow-400">! Superior a 8 meses</span>
+
+              <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <ResultCard label="Horas ahorradas" value={formatNumber(calc.hoursSaved)} sub="horas/año" />
+                <ResultCard label="FTE equivalentes" value={formatNumber(calc.fteEquivalent, { maximumFractionDigits: 2 })} sub="personal tiempo completo" />
+                <ResultCard label="ROI primer año" value={formatPercent(Math.max(0, calc.roi), 1)} sub="retorno de inversión" />
+                <ResultCard
+                  label="Tiempo de recuperación"
+                  value={
+                    <>
+                      {formatNumber(calc.paybackMonths, { maximumFractionDigits: 1 })} <span className="text-sm font-normal">meses</span>
+                    </>
                   }
-                </div>
+                  sub={
+                    calc.paybackMonths > 0 && calc.paybackMonths <= 8 ? (
+                      <span className="text-success-on">Inferior a 8 meses</span>
+                    ) : (
+                      <span className="text-warning-on">Superior a 8 meses</span>
+                    )
+                  }
+                />
               </div>
-            </div>
-          </div>
-          
-          {/* Distribución del Beneficio */}
-          <div className="bg-white dark:bg-gray-700 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600 mb-6">
-            <h5 className="font-semibold text-lg mb-4 text-gray-800 dark:text-gray-200">
-              Distribución del Beneficio Total: ${formatNumber(colToDollars(moneySaved))}
-            </h5>
-            
-            <div className="flex flex-col md:flex-row items-center justify-between">
-              <div className="md:w-1/3 mb-6 md:mb-0">
-                <div className="relative w-32 h-32 mx-auto">
-                  <div className="absolute inset-0 rounded-full overflow-hidden" 
-                    style={{background: 'conic-gradient(#4c1d95 0% 35%, #2563eb 35% 100%)'}}
-                  ></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-white dark:bg-gray-800 rounded-full w-20 h-20 flex items-center justify-center">
-                      <DollarSign className="text-blue-600 dark:text-blue-400" size={20} />
-                    </div>
-                  </div>
-                </div>
-                <div className="text-center mt-4">
-                  <div className="flex justify-center space-x-4">
-                    <div className="flex items-center">
-                      <span className="w-3 h-3 rounded-full bg-purple-800 dark:bg-purple-700 inline-block mr-1"></span>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Ahorro (35%)</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="w-3 h-3 rounded-full bg-blue-600 dark:bg-blue-500 inline-block mr-1"></span>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Ingresos (65%)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="md:w-2/3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-full mr-3">
-                        <Clock className="text-purple-800 dark:text-purple-400" size={16} />
-                      </div>
-                      <div>
-                        <h5 className="font-medium text-gray-800 dark:text-gray-200">Ahorro por Automatización</h5>
-                        <p className="text-lg font-bold mt-1 text-purple-800 dark:text-purple-400">
-                          ${formatNumber(colToDollars(annualSavings))} <span className="text-sm font-normal">/año</span>
-                        </p>
+
+              {/* Distribución del Beneficio */}
+              <div className="mb-6 rounded-xl border border-line bg-surface p-4 shadow-xs">
+                <h5 className="mb-4 text-lg font-semibold text-content">
+                  Distribución del beneficio total: {formatCurrency(calc.moneySaved, 'CRC')}
+                </h5>
+
+                <div className="flex flex-col items-center justify-between md:flex-row">
+                  <div className="mb-6 md:mb-0 md:w-1/3">
+                    <div className="relative mx-auto h-32 w-32">
+                      <div
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          background:
+                            'conic-gradient(rgb(var(--jc-info)) 0% 35%, rgb(var(--jc-brand)) 35% 100%)',
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-surface">
+                          <DollarSign className="text-brand" size={20} aria-hidden="true" />
+                        </div>
                       </div>
                     </div>
-                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                      Equivale a {formatDecimal(fteEquivalent)} FTE liberados para tareas de mayor valor
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-3">
-                        <TrendingUp className="text-blue-600 dark:text-blue-400" size={16} />
-                      </div>
-                      <div>
-                        <h5 className="font-medium text-gray-800 dark:text-gray-200">Incremento de Ingresos</h5>
-                        <p className="text-lg font-bold mt-1 text-blue-600 dark:text-blue-400">
-                          ${formatNumber(colToDollars(annualRevenue))} <span className="text-sm font-normal">/año</span>
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                      Mediante optimización de procesos y mejor tasa de servicio
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Sección Timeline - Opcional, puede ocultarse/mostrarse */}
-          <div className="bg-white dark:bg-gray-700 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
-              <h5 className="font-semibold text-lg mb-3 md:mb-0 text-gray-800 dark:text-gray-200 flex items-center">
-                <Calendar className="mr-2" size={18} />
-                Línea Temporal de Recuperación
-              </h5>
-              <div className="flex items-center space-x-2">
-                <button 
-                  onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-                  className={`px-3 py-1 rounded-md text-sm flex items-center ${
-                    isAutoPlaying 
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  {isAutoPlaying ? (
-                    <>
-                      <PauseCircle className="mr-1" size={16} />
-                      Pausar
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle className="mr-1" size={16} />
-                      Animar
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* Timeline */}
-            <div className="relative my-8">
-              {/* Timeline line */}
-              <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200 dark:bg-gray-600"></div>
-              
-              {/* Journey path */}
-              <div 
-                className="absolute top-4 left-0 h-0.5 bg-gradient-to-r from-green-500 to-blue-500 dark:from-green-400 dark:to-blue-400 rounded transition-all"
-                style={{ width: `${(selectedMonth / 12) * 100}%` }}
-              ></div>
-              
-              {/* Month markers */}
-              <div className="flex justify-between relative">
-                {monthNames.map((month, i) => {
-                  const isSelected = selectedMonth === i + 1;
-                  const isPassed = selectedMonth > i + 1;
-                  const isBreakEven = monthlySavings[i].isBreakEven;
-                  
-                  return (
-                    <div 
-                      key={i}
-                      className="flex flex-col items-center cursor-pointer"
-                      onClick={() => setSelectedMonth(i + 1)}
-                    >
-                      <div className={`
-                        w-6 h-6 rounded-full flex items-center justify-center
-                        ${isSelected ? 'bg-blue-500 dark:bg-blue-400 text-white transform scale-125 shadow-lg' : 
-                          isPassed ? 'bg-blue-400/60 dark:bg-blue-500/60 text-white' : 
-                          'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}
-                        ${isBreakEven ? 'ring-2 ring-green-500 dark:ring-green-400 ring-offset-2 dark:ring-offset-gray-800' : ''}
-                        transition-all duration-300 text-xs font-medium
-                      `}>
-                        {i + 1}
-                      </div>
-                      
-                      <span className={`text-xs mt-2 ${isSelected ? 'font-medium' : ''} ${isSelected ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
-                        {month}
+                    <div className="mt-4 flex justify-center gap-4 text-center">
+                      <span className="flex items-center gap-1 text-xs text-content-secondary">
+                        <span className="inline-block h-3 w-3 rounded-full bg-info" aria-hidden="true" /> Ahorro (35%)
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-content-secondary">
+                        <span className="inline-block h-3 w-3 rounded-full bg-brand" aria-hidden="true" /> Ingresos (65%)
                       </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-            
-            {/* Context message */}
-            <div className="text-sm text-gray-600 dark:text-gray-400 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
-              {selectedMonth === 12 ? (
-                <p>
-                  ¡Enhorabuena! Has completado un año de implementación, logrando un ahorro total de ${formatNumber(colToDollars(currentMonthData.cumulativeSaving))}.
-                  {breakEvenMonth && ` Alcanzaste el punto de equilibrio en el mes ${breakEvenMonth.monthIndex}.`}
-                </p>
-              ) : currentMonthData.isBreakEven ? (
-                <p>
-                  <strong>¡Punto de equilibrio alcanzado!</strong> En el mes {selectedMonth} recuperas tu inversión inicial de ${formatNumber(colToDollars(implementationCost))}.
-                  Todo ahorro a partir de ahora es beneficio neto.
-                </p>
-              ) : breakEvenMonth && selectedMonth > breakEvenMonth.monthIndex ? (
-                <p>
-                  Con un {currentMonthData.adoption.toFixed(0)}% de adopción, este mes generas ${formatNumber(colToDollars(currentMonthData.saving))} de ahorro.
-                  Ya has superado el punto de equilibrio (mes {breakEvenMonth.monthIndex}).
-                </p>
-              ) : (
-                <p>
-                  En el mes {selectedMonth}, con un {currentMonthData.adoption.toFixed(0)}% de adopción, estás ahorrando ${formatNumber(colToDollars(currentMonthData.saving))}.
-                  Has acumulado un ahorro de ${formatNumber(colToDollars(currentMonthData.cumulativeSaving))}.
-                </p>
-              )}
-            </div>
-            
-            {/* Month details */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Mes {selectedMonth}</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-md font-medium text-blue-600 dark:text-blue-400">
-                      ${formatNumber(colToDollars(currentMonthData.saving))}
+
+                  <div className="md:w-2/3">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="rounded-lg bg-surface-sunken p-3">
+                        <div className="flex items-center">
+                          <div className="mr-3 rounded-full bg-info-soft p-2">
+                            <Clock className="text-info-on" size={16} aria-hidden="true" />
+                          </div>
+                          <div>
+                            <h5 className="font-medium text-content">Ahorro por automatización</h5>
+                            <p className="mt-1 text-lg font-bold tabular-nums text-info-on">
+                              {formatCurrency(calc.annualSavings, 'CRC')} <span className="text-sm font-normal">/año</span>
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-xs text-content-muted">
+                          Equivale a {formatNumber(calc.fteEquivalent, { maximumFractionDigits: 2 })} FTE liberados para tareas de mayor valor
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-surface-sunken p-3">
+                        <div className="flex items-center">
+                          <div className="mr-3 rounded-full bg-brand/10 p-2">
+                            <TrendingUp className="text-brand" size={16} aria-hidden="true" />
+                          </div>
+                          <div>
+                            <h5 className="font-medium text-content">Incremento de ingresos</h5>
+                            <p className="mt-1 text-lg font-bold tabular-nums text-brand">
+                              {formatCurrency(calc.annualRevenue, 'CRC')} <span className="text-sm font-normal">/año</span>
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-xs text-content-muted">Mediante optimización de procesos y mejor tasa de servicio</p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <TrendingUp className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Acumulado</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-md font-medium text-blue-600 dark:text-blue-400">
-                      ${formatNumber(colToDollars(currentMonthData.cumulativeSaving))}
+
+              {/* Línea temporal de recuperación */}
+              <div className="rounded-xl border border-line bg-surface p-4 shadow-xs">
+                <div className="mb-4 flex flex-col items-start justify-between md:flex-row md:items-center">
+                  <h5 className="mb-3 flex items-center text-lg font-semibold text-content md:mb-0">
+                    <Calendar className="mr-2" size={18} aria-hidden="true" />
+                    Línea temporal de recuperación
+                  </h5>
+                  <GradientButton
+                    variant={isAutoPlaying ? 'soft' : 'outline'}
+                    size="sm"
+                    onClick={() => setIsAutoPlaying((v) => !v)}
+                    leadingIcon={
+                      isAutoPlaying ? <PauseCircle size={16} aria-hidden="true" /> : <PlayCircle size={16} aria-hidden="true" />
+                    }
+                  >
+                    {isAutoPlaying ? 'Pausar' : 'Animar'}
+                  </GradientButton>
+                </div>
+
+                <div className="relative my-8 overflow-x-auto">
+                  <div className="relative min-w-[560px]">
+                    <div className="absolute top-4 left-0 h-0.5 w-full bg-line" />
+                    <div
+                      className="absolute top-4 left-0 h-0.5 rounded bg-brand transition-all"
+                      style={{ width: `${(selectedMonth / 12) * 100}%` }}
+                    />
+
+                    <div className="relative flex justify-between">
+                      {MONTH_NAMES.map((month, i) => {
+                        const isSelected = selectedMonth === i + 1;
+                        const isPassed = selectedMonth > i + 1;
+                        const isBreakEven = calc.monthlySavings[i].monthIndex === calc.breakEvenMonth?.monthIndex;
+
+                        return (
+                          <button
+                            type="button"
+                            key={month}
+                            className="flex flex-col items-center"
+                            onClick={() => setSelectedMonth(i + 1)}
+                            aria-label={`Ver mes ${month}`}
+                            aria-pressed={isSelected}
+                          >
+                            <div
+                              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium transition-all duration-base ${
+                                isSelected
+                                  ? 'scale-125 bg-brand text-brand-contrast shadow-md'
+                                  : isPassed
+                                    ? 'bg-brand/50 text-brand-contrast'
+                                    : 'bg-surface-sunken text-content-muted'
+                              } ${isBreakEven ? 'ring-2 ring-success ring-offset-2 ring-offset-surface' : ''}`}
+                            >
+                              {i + 1}
+                            </div>
+                            <span className={`mt-2 text-xs ${isSelected ? 'font-medium text-content' : 'text-content-muted'}`}>
+                              {month}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Sliders className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Adopción</span>
+
+                <div className="mb-4 rounded-lg bg-surface-sunken p-3 text-sm text-content-secondary">
+                  <TimelineMessage selectedMonth={selectedMonth} currentMonthData={currentMonthData} breakEvenMonth={calc.breakEvenMonth} implementationCost={implementationCost} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-surface-sunken p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-sm text-content-secondary">
+                        <Clock className="h-4 w-4" aria-hidden="true" /> Mes {selectedMonth}
+                      </span>
+                      <span className="text-md font-medium tabular-nums text-brand">{formatCurrency(currentMonthData.saving, 'CRC')}</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-md font-medium text-blue-600 dark:text-blue-400">
-                      {currentMonthData.adoption.toFixed(0)}%
+                  <div className="rounded-lg bg-surface-sunken p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-sm text-content-secondary">
+                        <TrendingUp className="h-4 w-4" aria-hidden="true" /> Acumulado
+                      </span>
+                      <span className="text-md font-medium tabular-nums text-brand">
+                        {formatCurrency(currentMonthData.cumulativeSaving, 'CRC')}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-surface-sunken p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-sm text-content-secondary">
+                        <Sliders className="h-4 w-4" aria-hidden="true" /> Adopción
+                      </span>
+                      <span className="text-md font-medium tabular-nums text-brand">{formatPercent(currentMonthData.adoption, 0)}</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+          </>
+        )}
+      </div>
+
+      {/* Confirmación: cargar ejemplo con borrador sucio */}
+      <Modal
+        open={confirmKind === 'example'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton variant="solid" onClick={applyExample}>
+              Ver el ejemplo
+            </GradientButton>
+          </>
+        }
+      />
+
+      {/* Confirmación: descartar cambios sin guardar */}
+      <Modal
+        open={confirmKind === 'discard'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton variant="danger" onClick={confirmDiscard}>
+              Descartar
+            </GradientButton>
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+/** Máquina de estados de guardado (idéntica a la definida para las 14 herramientas). */
+function SaveStatus({ tool }) {
+  let icon = <span className="h-2 w-2 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let tone = 'text-content-muted';
+
+  if (tool.error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    tone = 'text-danger-on';
+  } else if (tool.isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    tone = 'text-content-secondary';
+  } else if (tool.justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    tone = 'text-success-on';
+  } else if (tool.isDirty) {
+    icon = <span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    tone = 'text-warning-on';
+  } else if (tool.lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(tool.lastSavedAt)}`;
+    tone = 'text-success-on';
+  }
+
+  return (
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm font-medium ${tone}`}>
+      {icon}
+      <span className="tabular-nums">{text}</span>
+      {tool.error && (
+        <button type="button" onClick={() => tool.save()} className="ml-1 underline underline-offset-2 hover:no-underline">
+          Reintentar
+        </button>
+      )}
+    </p>
+  );
+}
+
+/** Tarjeta de resultado dentro de la grilla de KPIs. */
+function ResultCard({ label, value, sub }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-3 shadow-xs">
+      <div className="text-center">
+        <div className="mb-1 text-sm text-content-secondary">{label}</div>
+        <div className="text-xl font-bold tabular-nums text-brand">{value}</div>
+        {sub && <div className="mt-1 text-xs text-content-muted">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Panel "Antes de mejorar" / "Después de mejorar": mismos campos, distinto tono semántico. */
+function ProcessPanel({ tone, title, icon, process, onChange, annualHours }) {
+  const toneClasses = {
+    danger: { border: 'border-danger/30', iconBg: 'bg-danger-soft', headerBorder: 'border-danger/20', valueColor: 'text-danger-on' },
+    success: { border: 'border-success/30', iconBg: 'bg-success-soft', headerBorder: 'border-success/20', valueColor: 'text-success-on' },
+  }[tone];
+
+  return (
+    <div className={`rounded-xl border ${toneClasses.border} bg-surface p-4 shadow-xs`}>
+      <h4 className={`mb-4 flex items-center border-b ${toneClasses.headerBorder} pb-2 text-lg font-semibold text-content`}>
+        <div className={`mr-3 rounded-full ${toneClasses.iconBg} p-2`}>{icon}</div>
+        {title}
+      </h4>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-content-secondary">Minutos por ejecución</label>
+        <div className="relative">
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            className="input pl-10 tabular-nums"
+            value={process.minutes}
+            onChange={(e) => onChange({ minutes: Math.max(0, Number(e.target.value) || 0) })}
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-content-muted">min</span>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-content-secondary">Frecuencia de ejecución</label>
+        <div className="grid grid-cols-2 gap-3">
+          <select
+            className="input appearance-none"
+            value={process.frequencyType}
+            onChange={(e) => onChange({ frequencyType: e.target.value })}
+            aria-label="Tipo de frecuencia"
+          >
+            {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              className="input pr-14 tabular-nums"
+              value={process.frequencyValue}
+              onChange={(e) => onChange({ frequencyValue: Math.max(0, Number(e.target.value) || 0) })}
+              aria-label="Cantidad de veces"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-content-muted">veces</span>
           </div>
+        </div>
+        <div className="mt-1 text-xs text-content-muted">
+          {process.frequencyValue} {process.frequencyValue === 1 ? 'vez' : 'veces'} {FREQUENCY_SUFFIX[process.frequencyType]}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-content-secondary">Número de personas</label>
+        <input
+          type="number"
+          min="1"
+          className="input tabular-nums"
+          value={process.peopleCount}
+          onChange={(e) => onChange({ peopleCount: Math.max(0, Number(e.target.value) || 0) })}
+        />
+      </div>
+
+      <div className="mt-5 border-t border-line-subtle pt-4">
+        <div className="flex justify-between">
+          <span className="text-sm font-medium text-content-secondary">Horas anuales:</span>
+          <span className={`font-bold tabular-nums ${toneClasses.valueColor}`}>{formatNumber(annualHours)} horas</span>
         </div>
       </div>
     </div>
   );
-};
+}
 
-export default RoiCalculator;
+/** Mensaje contextual bajo la línea temporal, según el mes seleccionado. */
+function TimelineMessage({ selectedMonth, currentMonthData, breakEvenMonth, implementationCost }) {
+  if (selectedMonth === 12) {
+    return (
+      <p>
+        Completaste un año de implementación, con un ahorro acumulado de {formatCurrency(currentMonthData.cumulativeSaving, 'CRC')}.
+        {breakEvenMonth && ` Alcanzaste el punto de equilibrio en el mes ${breakEvenMonth.monthIndex}.`}
+      </p>
+    );
+  }
+  if (breakEvenMonth && selectedMonth === breakEvenMonth.monthIndex) {
+    return (
+      <p>
+        <strong>Punto de equilibrio alcanzado.</strong> En el mes {selectedMonth} recuperas tu inversión inicial de{' '}
+        {formatCurrency(implementationCost, 'CRC')}. Todo ahorro a partir de ahora es beneficio neto.
+      </p>
+    );
+  }
+  if (breakEvenMonth && selectedMonth > breakEvenMonth.monthIndex) {
+    return (
+      <p>
+        Con un {formatPercent(currentMonthData.adoption, 0)} de adopción, este mes generas {formatCurrency(currentMonthData.saving, 'CRC')} de
+        ahorro. Ya superaste el punto de equilibrio (mes {breakEvenMonth.monthIndex}).
+      </p>
+    );
+  }
+  return (
+    <p>
+      En el mes {selectedMonth}, con un {formatPercent(currentMonthData.adoption, 0)} de adopción, estás ahorrando{' '}
+      {formatCurrency(currentMonthData.saving, 'CRC')}. Has acumulado {formatCurrency(currentMonthData.cumulativeSaving, 'CRC')}.
+    </p>
+  );
+}

@@ -1,545 +1,347 @@
-import React, { useState, useRef } from 'react';
-import { useLeanSixSigma } from '../../contexts/LeanSixSigmaContext';
-import { 
-  Upload, 
-  FileText, 
-  Database, 
-  Download, 
-  X, 
-  Check, 
-  AlertTriangle, 
-  Table
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useCallback, useId, useState } from 'react';
+import { Upload, FileText, FileJson, AlertTriangle, Check, X } from 'lucide-react';
+import GradientButton from '../common/GradientButton';
+import { importFromJson } from '../../utils/export';
+
+const EXT_LABEL = { csv: 'CSV (.csv)', json: 'JSON (.json)' };
 
 /**
- * Componente para importar y exportar datos desde diferentes fuentes
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- * @param {Function} props.onDataImported - Función a llamar cuando se importan datos
- * @param {string} props.targetTool - ID de la herramienta objetivo (opcional)
+ * Lee un archivo CSV de texto en headers + filas.
+ * Divide primero por salto de línea (no admite campos con saltos de línea
+ * incrustados) y soporta comillas dobles y comas dentro de un campo.
+ * @param {string} text
+ * @returns {{ headers: string[], rows: Record<string, string>[] }}
  */
-const FileConnector = ({ projectId, onDataImported, targetTool }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  
-  const [activeTab, setActiveTab] = useState('csv'); // csv, excel, api
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState(null);
-  const [previewData, setPreviewData] = useState(null);
-  const [apiEndpoint, setApiEndpoint] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  
-  // Refs
-  const fileInputRef = useRef(null);
-  
-  // Opciones disponibles
-  const sources = [
-    { id: 'csv', name: 'CSV', icon: FileText },
-    { id: 'excel', name: 'Excel', icon: Table },
-    { id: 'api', name: 'API', icon: Database },
-  ];
-  
-  // Disparar clic en input de archivo
-  const triggerFileInput = () => {
-    fileInputRef.current?.click();
-  };
-  
-  // Manejar carga de archivo
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    setIsUploading(true);
-    setUploadProgress(0);
-    setUploadError(null);
-    
-    try {
-      // Simulación de progreso
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(interval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 300);
-      
-      // Procesar el archivo según el tipo
-      let parsedData;
-      
-      if (activeTab === 'csv') {
-        parsedData = await parseCSV(file);
-      } else if (activeTab === 'excel') {
-        parsedData = await parseExcel(file);
-      }
-      
-      setPreviewData(parsedData);
-      
-      // Completar progreso
-      clearInterval(interval);
-      setUploadProgress(100);
-      
-      // Resetear después de 1 segundo
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1000);
-      
-    } catch (error) {
-      setUploadError(error.message);
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  };
-  
-  // Analizar archivo CSV
-  const parseCSV = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        try {
-          const csv = e.target.result;
-          const lines = csv.split('\\n');
-          const headers = lines[0].split(',').map(header => header.trim());
-          
-          const rows = [];
-          for (let i = 1; i < lines.length; i++) {
-            if (lines[i].trim() === '') continue;
-            
-            const values = lines[i].split(',').map(value => value.trim());
-            const row = {};
-            
-            headers.forEach((header, j) => {
-              row[header] = values[j];
-            });
-            
-            rows.push(row);
-          }
-          
-          resolve({
-            headers,
-            rows,
-            sourceType: 'csv',
-            fileName: file.name
-          });
-        } catch (error) {
-          reject(new Error('Error al procesar el archivo CSV. Verifique el formato.'));
-        }
-      };
-      
-      reader.onerror = () => {
-        reject(new Error('Error al leer el archivo.'));
-      };
-      
-      reader.readAsText(file);
-    });
-  };
-  
-  // Analizar archivo Excel (simulado, requeriría librería como xlsx en la implementación real)
-  const parseExcel = (file) => {
-    return new Promise((resolve, reject) => {
-      // En una implementación real, usaríamos una librería como xlsx
-      // Por ahora, simplemente simularemos el resultado
-      setTimeout(() => {
-        try {
-          // Simulación de datos de Excel
-          const headers = ['Fecha', 'Cliente', 'Producto', 'Cantidad', 'Precio'];
-          const rows = [
-            { Fecha: '2025-01-15', Cliente: 'ABC Corp', Producto: 'Widget A', Cantidad: '10', Precio: '150.00' },
-            { Fecha: '2025-01-20', Cliente: 'XYZ Inc', Producto: 'Widget B', Cantidad: '5', Precio: '320.00' },
-            { Fecha: '2025-02-03', Cliente: 'Acme Ltd', Producto: 'Widget C', Cantidad: '8', Precio: '220.00' }
-          ];
-          
-          resolve({
-            headers,
-            rows,
-            sourceType: 'excel',
-            fileName: file.name
-          });
-        } catch (error) {
-          reject(new Error('Error al procesar el archivo Excel. Verifique el formato.'));
-        }
-      }, 800);
-    });
-  };
-  
-  // Conectar a API
-  const connectToAPI = async () => {
-    setIsUploading(true);
-    setUploadProgress(0);
-    setUploadError(null);
-    
-    try {
-      // Simulación de progreso
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(interval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 300);
-      
-      // Simulación de conexión a API
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Datos simulados de API
-      const headers = ['ID', 'Fecha', 'Transacción', 'Monto', 'Estado'];
-      const rows = [
-        { ID: '001', Fecha: '2025-03-10', Transacción: 'Compra', Monto: '1200.00', Estado: 'Completada' },
-        { ID: '002', Fecha: '2025-03-11', Transacción: 'Venta', Monto: '850.00', Estado: 'Pendiente' },
-        { ID: '003', Fecha: '2025-03-15', Transacción: 'Reembolso', Monto: '320.00', Estado: 'Procesando' }
-      ];
-      
-      setPreviewData({
-        headers,
-        rows,
-        sourceType: 'api',
-        endpoint: apiEndpoint
-      });
-      
-      // Completar progreso
-      clearInterval(interval);
-      setUploadProgress(100);
-      
-      // Resetear después de 1 segundo
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1000);
-      
-    } catch (error) {
-      setUploadError('Error al conectar con la API. Verifique la URL y credenciales.');
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  };
-  
-  // Importar datos previsualizado
-  const importData = () => {
-    if (!previewData) return;
-    
-    // Actualizar el proyecto con los datos
-    if (targetTool) {
-      // Si hay una herramienta objetivo, asignar los datos a esa herramienta
-      const toolData = {
-        ...project[targetTool + 'Data'] || {},
-        importedData: previewData,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      const updateData = {};
-      updateData[targetTool + 'Data'] = toolData;
-      
-      updateProject(projectId, updateData);
-    } else {
-      // Si no hay herramienta objetivo, guardar los datos en el proyecto general
-      updateProject(projectId, { 
-        importedData: previewData,
-        lastDataImport: new Date().toISOString() 
-      });
-    }
-    
-    // Llamar a la función de callback si existe
-    if (onDataImported && typeof onDataImported === 'function') {
-      onDataImported(previewData);
-    }
-    
-    // Limpiar previsualización
-    setPreviewData(null);
-  };
-  
-  // Cancelar importación
-  const cancelImport = () => {
-    setPreviewData(null);
-    setUploadError(null);
-  };
-  
-  // Si no hay proyecto, no mostrar nada
-  if (!project) {
-    return <div className="p-4 text-center text-gray-500">Cargando datos del proyecto...</div>;
+function parseCsvText(text) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length === 0) {
+    throw new Error('El archivo está vacío.');
   }
-  
+
+  const parseLine = (line) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      if (inQuotes) {
+        if (char === '"') {
+          if (line[i + 1] === '"') {
+            current += '"';
+            i += 1;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += char;
+        }
+      } else if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+    return values;
+  };
+
+  const headers = parseLine(lines[0]).map((h) => h || '(sin nombre)');
+  if (headers.length === 0 || headers.every((h) => !h)) {
+    throw new Error('No se encontró una fila de encabezados.');
+  }
+
+  const rows = lines.slice(1).map((line) => {
+    const values = parseLine(line);
+    const row = {};
+    headers.forEach((header, i) => {
+      row[header] = values[i] ?? '';
+    });
+    return row;
+  });
+
+  if (rows.length === 0) {
+    throw new Error('El archivo tiene encabezados pero ninguna fila de datos.');
+  }
+
+  return { headers, rows };
+}
+
+/**
+ * Resume un JSON importado para previsualización: si es un array, cuenta sus
+ * elementos y detecta las claves del primero; si es un objeto, lista sus
+ * claves de primer nivel y, cuando el valor es un array, su longitud.
+ */
+function summarizeJson(json) {
+  if (Array.isArray(json)) {
+    const sample = json.find((item) => item && typeof item === 'object');
+    return { kind: 'array', length: json.length, keys: sample ? Object.keys(sample) : [] };
+  }
+  if (json && typeof json === 'object') {
+    const entries = Object.keys(json).map((key) => ({
+      key,
+      count: Array.isArray(json[key]) ? json[key].length : undefined,
+    }));
+    return { kind: 'object', entries };
+  }
+  return { kind: 'other', entries: [] };
+}
+
+/**
+ * Primitivo controlado para traer datos desde un archivo local (CSV o JSON).
+ * No escribe en ningún contexto ni en el almacenamiento: parsea el archivo,
+ * exige una confirmación explícita del usuario y entrega el resultado a
+ * `onData`. El consumidor decide qué hacer con los datos (p. ej. restaurar
+ * un respaldo en Configuración).
+ *
+ * @param {Object} props
+ * @param {Array<'csv'|'json'>} [props.accept=['csv','json']] - Formatos permitidos.
+ * @param {(result: { type: 'csv'|'json', fileName: string, headers?: string[], rows?: Record<string,string>[], json?: unknown }) => void} props.onData
+ *   Se llama solo tras la confirmación explícita del usuario, con los datos ya parseados.
+ * @param {() => void} [props.onCancel] - El usuario cierra el conector sin importar nada.
+ * @param {number} [props.maxSizeMb=10] - Tamaño máximo de archivo aceptado.
+ * @param {string} [props.title='Trae tus datos sin salir de tu navegador'] - Título visible.
+ * @param {string} [props.description] - Texto de apoyo bajo el título.
+ * @param {string} [props.className]
+ */
+export default function FileConnector({
+  accept = ['csv', 'json'],
+  onData,
+  onCancel,
+  maxSizeMb = 10,
+  title = 'Trae tus datos sin salir de tu navegador',
+  description,
+  className = '',
+}) {
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
+  const [reading, setReading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const inputId = useId();
+
+  const acceptAttr = accept.map((a) => `.${a}`).join(',');
+  const acceptLabel = accept.map((a) => EXT_LABEL[a] || a).join(' o ');
+
+  const processFile = useCallback(
+    async (file) => {
+      setError(null);
+      setPreview(null);
+
+      if (!file) return;
+
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (!ext || !accept.includes(ext)) {
+        setError(`Formato no permitido. Usa un archivo ${acceptLabel}.`);
+        return;
+      }
+
+      if (file.size === 0) {
+        setError('El archivo está vacío.');
+        return;
+      }
+
+      const maxBytes = maxSizeMb * 1024 * 1024;
+      if (file.size > maxBytes) {
+        setError(`El archivo pesa más de ${maxSizeMb} MB. Usa uno más pequeño.`);
+        return;
+      }
+
+      setReading(true);
+      try {
+        if (ext === 'csv') {
+          const text = await file.text();
+          const { headers, rows } = parseCsvText(text);
+          setPreview({ type: 'csv', fileName: file.name, headers, rows });
+        } else {
+          const json = await importFromJson(file);
+          setPreview({ type: 'json', fileName: file.name, json, summary: summarizeJson(json) });
+        }
+      } catch (err) {
+        setError(err.message || 'No se pudo leer el archivo.');
+      } finally {
+        setReading(false);
+      }
+    },
+    [accept, acceptLabel, maxSizeMb]
+  );
+
+  const handleInputChange = (e) => {
+    const file = e.target.files?.[0];
+    processFile(file);
+    e.target.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    processFile(file);
+  };
+
+  const reset = () => {
+    setPreview(null);
+    setError(null);
+  };
+
+  const confirmImport = () => {
+    if (!preview) return;
+    if (preview.type === 'csv') {
+      onData?.({ type: 'csv', fileName: preview.fileName, headers: preview.headers, rows: preview.rows });
+    } else {
+      onData?.({ type: 'json', fileName: preview.fileName, json: preview.json });
+    }
+    setPreview(null);
+  };
+
   return (
-    <div className="file-connector bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div className="p-4 bg-indigo-600 dark:bg-indigo-800 text-white">
-        <h3 className="text-lg font-medium flex items-center">
-          <Database className="mr-2" size={18} />
-          Conector de Datos
-        </h3>
-        <p className="text-sm opacity-80">
-          Importa datos desde diferentes fuentes para análisis
-        </p>
-      </div>
-      
-      {/* Selector de fuente */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex space-x-2">
-          {sources.map(source => (
-            <button
-              key={source.id}
-              className={`px-3 py-2 rounded-md flex items-center text-sm ${
-                activeTab === source.id 
-                  ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
-              }`}
-              onClick={() => setActiveTab(source.id)}
-            >
-              <source.icon className="mr-2" size={16} />
-              {source.name}
-            </button>
-          ))}
+    <div className={className}>
+      {title && <h3 className="text-base font-semibold text-content">{title}</h3>}
+      {description && <p className="mt-1 text-sm text-content-secondary">{description}</p>}
+      <p className="mt-2 text-xs text-content-muted">
+        El archivo se lee en tu equipo y se guarda en el almacenamiento de este navegador. Nada se sube a ningún
+        servidor.
+      </p>
+
+      {error && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-line bg-danger-soft p-3 text-sm text-danger-on">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
-      </div>
-      
-      {/* Área de carga */}
-      <div className="p-6">
-        {/* Si hay datos previsualizados, mostrarlos */}
-        {previewData ? (
-          <div>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h4 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-1">
-                  Vista previa de datos
-                </h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {previewData.sourceType === 'csv' || previewData.sourceType === 'excel' 
-                    ? `Archivo: ${previewData.fileName}` 
-                    : `API: ${previewData.endpoint}`}
-                </p>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={cancelImport}
-                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  title="Cancelar"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+      )}
+
+      {!preview ? (
+        <div className="mt-4">
+          <label
+            htmlFor={inputId}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-colors duration-fast ease-standard ${
+              dragActive ? 'border-brand bg-brand/5' : 'border-line hover:border-line-strong'
+            }`}
+          >
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-surface-sunken text-content-secondary">
+              <Upload size={22} aria-hidden="true" />
             </div>
-            
-            {/* Tabla de previsualización */}
-            <div className="overflow-x-auto mb-6 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+            <p className="text-sm font-medium text-content">Arrastra y suelta tu archivo aquí</p>
+            <p className="mt-1 text-xs text-content-muted">o haz clic para buscarlo — {acceptLabel}, hasta {maxSizeMb} MB</p>
+            <input
+              id={inputId}
+              type="file"
+              className="sr-only"
+              accept={acceptAttr}
+              onChange={handleInputChange}
+            />
+          </label>
+          {reading && (
+            <p className="mt-3 flex items-center gap-2 text-sm text-content-secondary" role="status" aria-live="polite">
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-line-strong border-t-brand" aria-hidden="true" />
+              Leyendo archivo…
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm font-medium text-success">
+              <Check size={16} aria-hidden="true" />
+              {preview.type === 'csv'
+                ? `Listo: ${preview.rows.length} filas leídas de ${preview.fileName}`
+                : `Listo: contenido leído de ${preview.fileName}`}
+            </p>
+            <button
+              type="button"
+              onClick={reset}
+              className="rounded p-1 text-content-muted transition-colors duration-fast hover:text-content"
+              aria-label="Elegir otro archivo"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {preview.type === 'csv' ? (
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="min-w-full divide-y divide-line text-sm">
+                <thead className="bg-surface-sunken">
                   <tr>
-                    {previewData.headers.map((header, index) => (
-                      <th 
-                        key={index}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    {preview.headers.map((header) => (
+                      <th
+                        key={header}
+                        className="whitespace-nowrap px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-content-muted"
                       >
                         {header}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {previewData.rows.slice(0, 5).map((row, rowIndex) => (
-                    <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50 dark:bg-gray-700/50' : ''}>
-                      {previewData.headers.map((header, cellIndex) => (
-                        <td 
-                          key={cellIndex}
-                          className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400"
-                        >
+                <tbody className="divide-y divide-line">
+                  {preview.rows.slice(0, 10).map((row, i) => (
+                    <tr key={i}>
+                      {preview.headers.map((header) => (
+                        <td key={header} className="whitespace-nowrap px-3 py-2 text-content-secondary">
                           {row[header]}
                         </td>
                       ))}
                     </tr>
                   ))}
-                  {previewData.rows.length > 5 && (
-                    <tr>
-                      <td 
-                        colSpan={previewData.headers.length}
-                        className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 text-center italic"
-                      >
-                        ... {previewData.rows.length - 5} más filas
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
-            </div>
-            
-            <div className="text-center">
-              <button
-                onClick={importData}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow-sm flex items-center mx-auto"
-              >
-                <Check className="mr-2" size={16} />
-                Importar datos
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            {activeTab === 'csv' || activeTab === 'excel' ? (
-              <div className="text-center">
-                <div 
-                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 mb-4 cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
-                  onClick={triggerFileInput}
-                >
-                  <div className="mx-auto w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-4">
-                    <Upload className="text-indigo-600 dark:text-indigo-400" size={24} />
-                  </div>
-                  
-                  <h4 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
-                    {activeTab === 'csv' ? 'Sube un archivo CSV' : 'Sube un archivo Excel'}
-                  </h4>
-                  
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Arrastra y suelta tu archivo aquí o haz clic para buscar
-                  </p>
-                  
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {activeTab === 'csv' 
-                      ? 'Archivos .csv de hasta 10MB' 
-                      : 'Archivos .xlsx, .xls de hasta 10MB'}
-                  </p>
-                  
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    ref={fileInputRef} 
-                    onChange={handleFileUpload}
-                    accept={activeTab === 'csv' ? '.csv' : '.xlsx,.xls'}
-                  />
-                </div>
-                
-                {uploadError && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 p-3 rounded-lg text-red-600 dark:text-red-400 text-sm flex items-center mb-4">
-                    <AlertTriangle className="mr-2" size={16} />
-                    {uploadError}
-                  </div>
-                )}
-                
-                {isUploading && (
-                  <div className="mb-4">
-                    <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-200"
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
-                      {uploadProgress}%
-                    </div>
-                  </div>
-                )}
-                
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-6">
-                  <p className="mb-1 font-medium">Formatos soportados:</p>
-                  <ul className="list-disc list-inside text-left">
-                    {activeTab === 'csv' ? (
-                      <>
-                        <li>Valores separados por comas (.csv)</li>
-                        <li>UTF-8 o Latin-1 encoding</li>
-                        <li>Primera fila como encabezados</li>
-                      </>
-                    ) : (
-                      <>
-                        <li>Libros de Excel (.xlsx, .xls)</li>
-                        <li>Primera hoja de cálculo</li>
-                        <li>Primera fila como encabezados</li>
-                      </>
-                    )}
-                  </ul>
-                </div>
+              <div className="border-t border-line bg-surface-sunken px-3 py-2 text-xs text-content-muted">
+                {preview.headers.length} columnas · {preview.rows.length} filas en total
+                {preview.rows.length > 10 ? ` (mostrando las primeras 10)` : ''}
               </div>
-            ) : (
-              <div>
-                <h4 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-4">
-                  Conectar a una API
-                </h4>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      URL del Endpoint
-                    </label>
-                    <input 
-                      type="text" 
-                      value={apiEndpoint}
-                      onChange={(e) => setApiEndpoint(e.target.value)}
-                      placeholder="https://api.ejemplo.com/datos"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 bg-white dark:bg-gray-800 dark:text-gray-200" 
-                    />
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Autenticación
-                      </label>
-                      <button 
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
-                        onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                      >
-                        {showApiKeyInput ? 'Ocultar' : 'Mostrar API Key'}
-                      </button>
-                    </div>
-                    
-                    {showApiKeyInput && (
-                      <input 
-                        type="password" 
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="API Key o Token"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 bg-white dark:bg-gray-800 dark:text-gray-200 mb-3" 
-                      />
-                    )}
-                  </div>
-                  
-                  {uploadError && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 p-3 rounded-lg text-red-600 dark:text-red-400 text-sm flex items-center">
-                      <AlertTriangle className="mr-2" size={16} />
-                      {uploadError}
-                    </div>
-                  )}
-                  
-                  {isUploading && (
-                    <div>
-                      <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-200"
-                          style={{ width: `${uploadProgress}%` }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
-                        {uploadProgress}%
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <button
-                      onClick={connectToAPI}
-                      disabled={!apiEndpoint}
-                      className={`px-4 py-2 rounded-md text-white flex items-center ${
-                        apiEndpoint 
-                          ? 'bg-indigo-600 hover:bg-indigo-700' 
-                          : 'bg-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <Database className="mr-2" size={16} />
-                      Conectar y previsualizar
-                    </button>
-                  </div>
-                </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-line p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-content">
+                <FileJson size={16} className="text-content-secondary" aria-hidden="true" />
+                {preview.summary.kind === 'array' ? 'Lista de elementos' : 'Objeto JSON'}
               </div>
-            )}
+              {preview.summary.kind === 'array' && (
+                <p className="text-sm text-content-secondary">
+                  {preview.summary.length} elementos
+                  {preview.summary.keys.length > 0 && <> · claves: {preview.summary.keys.join(', ')}</>}
+                </p>
+              )}
+              {preview.summary.kind === 'object' && (
+                <ul className="space-y-1 text-sm text-content-secondary">
+                  {preview.summary.entries.map(({ key, count }) => (
+                    <li key={key}>
+                      <span className="font-medium text-content">{key}</span>
+                      {count !== undefined ? ` — ${count} elementos` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {preview.summary.kind === 'other' && (
+                <p className="text-sm text-content-secondary">El archivo no contiene un objeto ni una lista.</p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <GradientButton variant="solid" leadingIcon={<Check size={16} />} onClick={confirmImport}>
+              Usar estos datos
+            </GradientButton>
+            <GradientButton variant="outline" leadingIcon={<FileText size={16} />} onClick={reset}>
+              Elegir otro archivo
+            </GradientButton>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {onCancel && !preview && (
+        <div className="mt-4">
+          <GradientButton variant="ghost" size="sm" onClick={onCancel}>
+            Cancelar
+          </GradientButton>
+        </div>
+      )}
     </div>
   );
-};
-
-export default FileConnector;
+}

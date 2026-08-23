@@ -1,84 +1,139 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Info,
-  Save,
-  RefreshCw,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Maximize2,
-  Minimize2,
-  Share2,
-  Download,
-  Edit,
-  MoreHorizontal
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { useParams } from 'react-router-dom';
+import { Info, Maximize2, Minimize2, MoreHorizontal, Download, Link as LinkIcon, XCircle } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
 import GradientButton from '../components/common/GradientButton';
+import Dropdown from '../components/ui/Dropdown';
+import Tooltip from '../components/ui/Tooltip';
+import Notification from '../components/common/Notification';
+import ErrorBoundary from '../components/common/ErrorBoundary';
+import EmptyState from '../components/common/EmptyState';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import PhaseBadge from '../components/common/PhaseBadge';
+import StatusBadge from '../components/common/StatusBadge';
+import { SkeletonCard, SkeletonText } from '../components/common/Skeleton';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+import { PHASE_ORDER, normalizePhase, formatPhase } from '../lib/phases';
+import { spring } from '../lib/motion';
+import { exportProjectTool } from '../utils/export';
 
-// Importar componentes de herramientas
-import ProjectCharter from '../tools/ProjectCharter';
-import SipocViewer from '../tools/SipocViewer';
-import VocVisualizer from '../tools/VocVisualizer';
-import CtqDashboard from '../tools/CtqDashboard';
-import ValueStreamMap from '../tools/ValueStreamMap';
-import StakeholderAnalysis from '../tools/StakeholderAnalysis';
-import PriorizationMatrix from '../tools/PriorizationMatrix';
-import CauseEffectDiagram from '../tools/CauseEffectDiagram';
-import ParetoChart from '../tools/ParetoChart';
-import FmeaAnalysis from '../tools/FmeaAnalysis';
-import ControlChart from '../tools/ControlChart';
-import FiveS from '../tools/FiveS';
-import RoiCalculator from '../tools/RoiCalculator';
-import ProjectTimeline from '../tools/ProjectTimeline';
+// Importar componentes de herramientas (lazy: cada uno en su propio chunk)
+const ProjectCharter = lazy(() => import('../tools/ProjectCharter'));
+const SipocViewer = lazy(() => import('../tools/SipocViewer'));
+const VocVisualizer = lazy(() => import('../tools/VocVisualizer'));
+const CtqDashboard = lazy(() => import('../tools/CtqDashboard'));
+const ValueStreamMap = lazy(() => import('../tools/ValueStreamMap'));
+const StakeholderAnalysis = lazy(() => import('../tools/StakeholderAnalysis'));
+const PriorizationMatrix = lazy(() => import('../tools/PriorizationMatrix'));
+const CauseEffectDiagram = lazy(() => import('../tools/CauseEffectDiagram'));
+const ParetoChart = lazy(() => import('../tools/ParetoChart'));
+const FmeaAnalysis = lazy(() => import('../tools/FmeaAnalysis'));
+const ControlChart = lazy(() => import('../tools/ControlChart'));
+const FiveS = lazy(() => import('../tools/FiveS'));
+const RoiCalculator = lazy(() => import('../tools/RoiCalculator'));
+const ProjectTimeline = lazy(() => import('../tools/ProjectTimeline'));
+
+const STATUS_LABELS = { not_started: 'Sin iniciar', in_progress: 'En progreso', completed: 'Completada' };
 
 const ToolPage = () => {
   const { projectId, toolId } = useParams();
-  const navigate = useNavigate();
-  const { getProject, getTool, updateToolStatus } = useLeanSixSigma();
-  
-  // Estados
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isInfoVisible, setIsInfoVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  
-  // Obtener proyecto y herramienta
+  const { getProject, getTool, updateToolStatus, tools } = useLeanSixSigma();
+
   const project = getProject(projectId);
   const tool = getTool(toolId);
-  
-  // Verificar si la herramienta existe en el proyecto
-  const toolInProject = project?.tools?.[toolId];
-  
-  // Redirigir si no existe el proyecto o la herramienta
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [pulseKey, setPulseKey] = useState(0);
+  const shouldReduceMotion = useReducedMotion();
+
+  useDocumentTitle(project && tool ? `${tool.name} — ${project.name}` : undefined);
+
+  // Escape cierra la pantalla completa.
   useEffect(() => {
-    if (!project || !tool) {
-      navigate('/projects');
-      return;
-    }
-    
-    // Simulación de carga
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
-    
-    return () => clearTimeout(timer);
-  }, [project, tool, navigate]);
-  
-  // Si el proyecto o la herramienta no existe, no renderizar nada
+    if (!isFullscreen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
   if (!project || !tool) {
-    return null;
+    return (
+      <PageContainer gap="lg">
+        <EmptyState
+          variant="no-encontrado"
+          title="Herramienta no encontrada"
+          description="El proyecto o la herramienta que buscas no existen, o el enlace está mal escrito."
+          action={<GradientButton to="/projects">Ver proyectos</GradientButton>}
+        />
+      </PageContainer>
+    );
   }
-  
-  // Función para actualizar el estado de la herramienta
+
+  const toolInProject = project.tools?.[toolId];
+  const toolStatus = toolInProject?.status || 'not_started';
+
+  // Navegación anterior/siguiente sobre el PLAN del proyecto, en orden DMAIC
+  // (fórmula 0.4.3 adaptada a un recorrido secuencial en vez de "próxima pendiente").
+  const planIds = Object.keys(project.tools || {});
+  const orderedPlan = PHASE_ORDER.flatMap((phase) =>
+    tools.filter((t) => planIds.includes(t.id) && normalizePhase(t.phase) === phase)
+  );
+  const currentPlanIndex = orderedPlan.findIndex((t) => t.id === toolId);
+  const prevTool = currentPlanIndex > 0 ? orderedPlan[currentPlanIndex - 1] : null;
+  const nextTool =
+    currentPlanIndex >= 0 && currentPlanIndex < orderedPlan.length - 1 ? orderedPlan[currentPlanIndex + 1] : null;
+
   const handleToolStatusChange = (status) => {
     updateToolStatus(projectId, toolId, status);
+
+    if (status === 'completed') {
+      setPulseKey((k) => k + 1);
+
+      const phaseKey = normalizePhase(tool.phase);
+      const effectivePlanIds = planIds.includes(toolId) ? planIds : [...planIds, toolId];
+      const phaseToolIds = effectivePlanIds.filter((id) => {
+        const catalogTool = tools.find((t) => t.id === id);
+        return catalogTool && normalizePhase(catalogTool.phase) === phaseKey;
+      });
+      const phaseComplete = phaseToolIds.every((id) => (id === toolId ? true : project.tools[id]?.status === 'completed'));
+
+      if (phaseComplete) {
+        setNotice({ message: `Fase ${formatPhase(tool.phase)} completada`, type: 'success' });
+      } else {
+        const nextPhase = PHASE_ORDER[PHASE_ORDER.indexOf(phaseKey) + 1];
+        setNotice({
+          message: nextPhase ? `${tool.name} completada — ${nextPhase} está más cerca` : `${tool.name} completada`,
+          type: 'success',
+        });
+      }
+    } else {
+      setNotice({ message: `Estado actualizado: ${STATUS_LABELS[status] || status}`, type: 'info' });
+    }
   };
-  
+
+  const handleDownloadJson = () => {
+    const ok = exportProjectTool(project, toolId);
+    setNotice(
+      ok
+        ? { message: 'Datos descargados en JSON', type: 'success' }
+        : { message: 'Esta herramienta aún no tiene datos guardados en el proyecto', type: 'error' }
+    );
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setNotice({ message: 'Enlace copiado al portapapeles', type: 'success' });
+    } catch {
+      setNotice({ message: 'No se pudo copiar el enlace', type: 'error' });
+    }
+  };
+
   // Función para renderizar el componente de la herramienta
   const renderToolComponent = () => {
     switch (tool.component) {
@@ -112,255 +167,168 @@ const ToolPage = () => {
         return <ProjectTimeline projectId={projectId} />;
       default:
         return (
-          <div className="flex flex-col items-center justify-center text-center p-8">
-            <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center mb-4">
-              <XCircle size={32} className="text-gray-500" />
+          <div className="flex flex-col items-center justify-center p-8 text-center">
+            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-surface-sunken">
+              <XCircle size={32} className="text-content-muted" aria-hidden="true" />
             </div>
-            <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-2">
-              Componente no implementado
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md">
-              El componente para esta herramienta aún no está implementado.
-              Estamos trabajando en ello.
+            <h3 className="mb-2 text-lg font-medium text-content">Componente no implementado</h3>
+            <p className="max-w-md text-content-secondary">
+              El componente para esta herramienta aún no está implementado. Estamos trabajando en ello.
             </p>
           </div>
         );
     }
   };
-  
-  // Obtener estado de la herramienta
-  const toolStatus = toolInProject?.status || 'not_started';
-  
-  // Función para obtener color según estado
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-      case 'in_progress':
-        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
-      case 'not_started':
-        return 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300';
-      default:
-        return 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300';
-    }
-  };
-  
-  // Función para obtener texto según estado
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'Completada';
-      case 'in_progress':
-        return 'En Progreso';
-      case 'not_started':
-        return 'No Iniciada';
-      default:
-        return status;
-    }
-  };
-  
-  // Función para obtener icono según estado
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle size={16} />;
-      case 'in_progress':
-        return <Clock size={16} />;
-      case 'not_started':
-        return <XCircle size={16} />;
-      default:
-        return <Clock size={16} />;
-    }
-  };
-  
-  // Variantes para animaciones
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3
-      }
-    }
-  };
+
+  const infoContent = (
+    <div className="space-y-3 text-left">
+      <p className="text-sm text-content-secondary">{tool.description}</p>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <p className="font-medium text-content">Categoría</p>
+          <p className="text-content-secondary">{tool.category}</p>
+        </div>
+        <div>
+          <p className="font-medium text-content">Dificultad</p>
+          <p className="text-content-secondary">{tool.difficulty}</p>
+        </div>
+      </div>
+      {tool.bestPractices?.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-medium text-content">Buenas prácticas</p>
+          <ul className="list-disc space-y-1 pl-4 text-xs text-content-secondary">
+            {tool.bestPractices.slice(0, 3).map((practice) => (
+              <li key={practice}>{practice}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+
+  const menuItems = [
+    { id: 'download', label: 'Descargar JSON', icon: Download, onSelect: handleDownloadJson },
+    { id: 'copy-link', label: 'Copiar enlace', icon: LinkIcon, onSelect: handleCopyLink },
+  ];
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className={`transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 p-0 bg-gray-100 dark:bg-gray-900' : ''}`}
-    >
-      {/* Cabecera */}
-      <motion.div 
-        variants={itemVariants} 
-        className={`${isFullscreen ? 'p-4 bg-white dark:bg-gray-800 shadow-md' : 'mb-6'} flex justify-between items-center`}
-      >
-        <div className="flex items-center">
-          <Link 
-            to={`/projects/${projectId}`} 
-            className="mr-4 p-2 rounded-full bg-white dark:bg-gray-800 shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </Link>
-          
-          <div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{tool.name}</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{project.name}</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(toolStatus)}`}>
-            <span>{getStatusIcon(toolStatus)}</span>
-            <span>{getStatusText(toolStatus)}</span>
-          </span>
-          
-          <button
-            onClick={() => setIsInfoVisible(!isInfoVisible)}
-            className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
-            title="Información"
-          >
-            <Info size={18} />
-          </button>
-          
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
-            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-          >
-            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-          </button>
-          
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
-              title="Más opciones"
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700 py-1">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setIsEditing(true);
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                >
-                  <Edit size={16} className="mr-2" />
-                  Editar
-                </button>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    // Aquí iría la lógica para compartir
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                >
-                  <Share2 size={16} className="mr-2" />
-                  Compartir
-                </button>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    // Aquí iría la lógica para descargar
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                >
-                  <Download size={16} className="mr-2" />
-                  Descargar
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
-      
-      {/* Panel de información */}
-      {isInfoVisible && (
-        <motion.div 
-          variants={itemVariants}
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6"
-        >
-          <div className="flex items-start">
-            <div className="flex-1">
-              <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-2">{tool.name}</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">{tool.description}</p>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Fase DMAIC</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{tool.phase}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Categoría</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{tool.category}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Dificultad</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{tool.difficulty}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex flex-col space-y-2">
+    <div className={isFullscreen ? 'fixed inset-0 z-modal overflow-y-auto bg-app p-4 sm:p-6' : ''}>
+      <Notification
+        message={notice?.message}
+        type={notice?.type || 'info'}
+        show={Boolean(notice)}
+        onClose={() => setNotice(null)}
+        duration={3000}
+      />
+
+      <PageContainer gap="lg">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Proyectos', to: '/projects' },
+            { label: project.name, to: `/projects/${projectId}` },
+            { label: tool.name },
+          ]}
+          title={tool.name}
+          description={tool.description}
+          meta={
+            <>
+              <PhaseBadge phase={tool.phase} />
+              <motion.span
+                key={pulseKey}
+                initial={shouldReduceMotion ? false : { scale: 0.5 }}
+                animate={{ scale: 1 }}
+                transition={spring}
+              >
+                <StatusBadge status={toolStatus} kind="tool" />
+              </motion.span>
+            </>
+          }
+          actions={
+            <>
+              <GradientButton
+                variant="outline"
+                size="sm"
+                disabled={!prevTool}
+                to={prevTool ? `/projects/${projectId}/tools/${prevTool.id}` : undefined}
+              >
+                Anterior
+              </GradientButton>
+              <GradientButton
+                variant="outline"
+                size="sm"
+                disabled={!nextTool}
+                to={nextTool ? `/projects/${projectId}/tools/${nextTool.id}` : undefined}
+              >
+                Siguiente
+              </GradientButton>
+
+              <label className="sr-only" htmlFor="tool-status-select">
+                Estado de la herramienta
+              </label>
               <select
+                id="tool-status-select"
                 value={toolStatus}
                 onChange={(e) => handleToolStatusChange(e.target.value)}
-                className="px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input h-9 w-auto text-sm"
               >
-                <option value="not_started">No Iniciada</option>
-                <option value="in_progress">En Progreso</option>
+                <option value="not_started">Sin iniciar</option>
+                <option value="in_progress">En progreso</option>
                 <option value="completed">Completada</option>
               </select>
-              
-              <GradientButton 
-                size="sm" 
-                className="whitespace-nowrap"
-                onClick={() => {
-                  // Aquí iría la lógica para guardar cambios
-                }}
+
+              <Tooltip content={infoContent} interactive side="bottom" maxWidth={320}>
+                <button
+                  type="button"
+                  className="rounded-lg border border-line bg-surface p-2 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken"
+                  aria-label="Información de la herramienta"
+                >
+                  <Info size={16} />
+                </button>
+              </Tooltip>
+
+              <button
+                type="button"
+                onClick={() => setIsFullscreen((v) => !v)}
+                className="rounded-lg border border-line bg-surface p-2 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken"
+                title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
               >
-                <Save size={14} className="mr-1" /> Guardar
-              </GradientButton>
-            </div>
-          </div>
-        </motion.div>
-      )}
-      
-      {/* Contenedor de la herramienta */}
-      <motion.div 
-        variants={itemVariants}
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden ${isFullscreen ? 'flex-1' : ''}`}
-      >
-        {isLoading ? (
-          <div className="p-8 flex flex-col items-center justify-center">
-            <div className="animate-spin mb-4">
-              <RefreshCw size={32} className="text-primary-500" />
-            </div>
-            <p className="text-gray-600 dark:text-gray-400">Cargando herramienta...</p>
-          </div>
-        ) : (
-          <div className={`${isFullscreen ? 'h-[calc(100vh-80px)]' : 'h-[calc(80vh-120px)]'} overflow-auto`}>
-            {renderToolComponent()}
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
+                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+
+              <Dropdown
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded-lg border border-line bg-surface p-2 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken"
+                    aria-label="Más opciones"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                }
+                items={menuItems}
+                align="end"
+              />
+            </>
+          }
+        />
+
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+          <ErrorBoundary resetKeys={[toolId, projectId]}>
+            <Suspense
+              fallback={
+                <div role="status" aria-busy="true" className="space-y-4 p-8">
+                  <span className="sr-only">Cargando…</span>
+                  <SkeletonCard />
+                  <SkeletonText lines={4} />
+                </div>
+              }
+            >
+              {renderToolComponent()}
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </PageContainer>
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import projectsData from '../data/projects';
 import toolsData from '../data/tools';
 import { loadProjects, saveProjects, loadTools, saveTools } from '../utils/storage';
@@ -7,6 +7,7 @@ import { loadProjects, saveProjects, loadTools, saveTools } from '../utils/stora
 const LeanSixSigmaContext = createContext();
 
 // Hook personalizado para usar el contexto
+// eslint-disable-next-line react-refresh/only-export-components -- ~30 archivos ya importan useLeanSixSigma desde aqui; separar el archivo no es practico.
 export function useLeanSixSigma() {
   return useContext(LeanSixSigmaContext);
 }
@@ -56,7 +57,7 @@ export function LeanSixSigmaProvider({ children }) {
   }, [tools, loading]);
 
   // Función para añadir un nuevo proyecto
-  const addProject = (newProject) => {
+  const addProject = useCallback((newProject) => {
     const projectWithId = {
       ...newProject,
       id: `project-${Date.now()}`,
@@ -83,10 +84,10 @@ export function LeanSixSigmaProvider({ children }) {
 
     setProjects(prevProjects => [...prevProjects, projectWithId]);
     return projectWithId;
-  };
+  }, []);
 
   // Función para actualizar un proyecto existente
-  const updateProject = (id, updatedData) => {
+  const updateProject = useCallback((id, updatedData) => {
     setProjects(prevProjects => 
       prevProjects.map(project => {
         if (project.id !== id) return project;
@@ -115,17 +116,17 @@ export function LeanSixSigmaProvider({ children }) {
         };
       })
     );
-  };
+  }, []);
 
   // Función para eliminar un proyecto
-  const deleteProject = (id) => {
-    setProjects(prevProjects => 
+  const deleteProject = useCallback((id) => {
+    setProjects(prevProjects =>
       prevProjects.filter(project => project.id !== id)
     );
-  };
+  }, []);
 
   // Función para marcar una herramienta como completada o pendiente en un proyecto
-  const updateToolStatus = (projectId, toolId, status) => {
+  const updateToolStatus = useCallback((projectId, toolId, status) => {
     setProjects(prevProjects => 
       prevProjects.map(project => {
         if (project.id !== projectId) return project;
@@ -144,20 +145,20 @@ export function LeanSixSigmaProvider({ children }) {
         };
       })
     );
-  };
+  }, []);
 
   // Obtener un proyecto por su ID
-  const getProject = (id) => {
+  const getProject = useCallback((id) => {
     return projects.find(project => project.id === id) || null;
-  };
+  }, [projects]);
 
   // Obtener una herramienta por su ID
-  const getTool = (id) => {
+  const getTool = useCallback((id) => {
     return tools.find(tool => tool.id === id) || null;
-  };
+  }, [tools]);
 
   // Obtener herramientas de un proyecto agrupadas por fase
-  const getProjectToolsByPhase = (projectId) => {
+  const getProjectToolsByPhase = useCallback((projectId) => {
     const project = getProject(projectId);
     if (!project) return {};
     
@@ -193,10 +194,10 @@ export function LeanSixSigmaProvider({ children }) {
     });
     
     return orderedToolsByPhase;
-  };
-  
+  }, [tools, getProject]);
+
   // Calcular estadísticas generales
-  const getStats = () => {
+  const getStats = useCallback(() => {
     const totalProjects = projects.length;
     const activeProjects = projects.filter(p => p.status === 'active').length;
     const completedProjects = projects.filter(p => p.status === 'completed').length;
@@ -219,10 +220,10 @@ export function LeanSixSigmaProvider({ children }) {
       completedTools,
       completionRate: totalTools ? Math.round((completedTools / totalTools) * 100) : 0
     };
-  };
+  }, [projects]);
 
   // Valor del contexto
-  const value = {
+  const value = useMemo(() => ({
     projects,
     tools,
     loading,
@@ -234,7 +235,19 @@ export function LeanSixSigmaProvider({ children }) {
     getTool,
     getProjectToolsByPhase,
     getStats
-  };
+  }), [
+    projects,
+    tools,
+    loading,
+    addProject,
+    updateProject,
+    deleteProject,
+    updateToolStatus,
+    getProject,
+    getTool,
+    getProjectToolsByPhase,
+    getStats
+  ]);
 
   return (
     <LeanSixSigmaContext.Provider value={value}>

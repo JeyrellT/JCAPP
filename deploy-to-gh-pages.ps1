@@ -35,14 +35,19 @@ if (-not (Test-Path $buildDir)) {
     exit 1
 }
 
+# Generate SPA fallback (404.html) and disable Jekyll processing on GitHub Pages
+Write-Host "Generating 404.html and .nojekyll..." -ForegroundColor Yellow
+Copy-Item -Path "$buildDir\index.html" -Destination "$buildDir\404.html" -Force
+New-Item -ItemType File -Path "$buildDir\.nojekyll" -Force | Out-Null
+
 # Create a temporary directory for the gh-pages branch
 $tempDir = [System.IO.Path]::GetTempPath() + [System.Guid]::NewGuid().ToString()
 Write-Host "Creating temporary directory for deployment: $tempDir" -ForegroundColor Yellow
 New-Item -ItemType Directory -Path $tempDir | Out-Null
 
-# Copy build files to temporary directory
+# Copy build files to temporary directory (-Force ensures hidden files like .nojekyll are copied)
 Write-Host "Copying build files to temporary directory..." -ForegroundColor Yellow
-Copy-Item -Path "$buildDir\*" -Destination $tempDir -Recurse
+Copy-Item -Path "$buildDir\*" -Destination $tempDir -Recurse -Force
 
 # Initialize git in temporary directory
 Set-Location $tempDir

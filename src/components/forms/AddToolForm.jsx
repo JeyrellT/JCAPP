@@ -1,267 +1,198 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Plus, 
-  X, 
-  Search, 
-  Filter, 
-  CheckCircle2, 
-  ChevronDown,
-  Info
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, CheckCircle2 } from 'lucide-react';
 import { useLeanSixSigma } from '../../contexts/LeanSixSigmaContext';
+import { PHASE_ORDER, formatPhase } from '../../lib/phases';
+import PhaseBadge from '../common/PhaseBadge';
+import StatusBadge from '../common/StatusBadge';
+import GradientButton from '../common/GradientButton';
+import Notification from '../common/Notification';
 
 /**
- * Formulario para añadir herramientas a un proyecto
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- * @param {Function} props.onClose - Función a llamar al cerrar
- * @param {Function} props.onToolAdded - Función a llamar cuando se añade una herramienta
+ * Planificador de herramientas del proyecto: añade herramientas del catálogo
+ * al plan (`project.tools`), que hoy siempre contiene las 14 disponibles
+ * para cualquier proyecto — "añadir" significa incorporarlas al plan real.
+ * Sin cabecera ni overlay propios: se monta dentro de un `<Modal>`.
+ *
+ * @param {Object} props
+ * @param {string} props.projectId
+ * @param {Function} [props.onClose] - Se llama al cancelar o al terminar de añadir.
+ * @param {Function} [props.onToolAdded] - Recibe el array de ids de herramientas añadidas.
  */
-const AddToolForm = ({ projectId, onClose, onToolAdded }) => {
+export default function AddToolForm({ projectId, onClose, onToolAdded }) {
   const { getProject, tools, updateProject } = useLeanSixSigma();
-  
+  const project = getProject(projectId);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPhase, setSelectedPhase] = useState('all');
+  const [selectedIds, setSelectedIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [project, setProject] = useState(null);
-  const [selectedTools, setSelectedTools] = useState([]);
-  
-  // Fases DMAIC
-  const phases = [
-    { id: 'define', name: 'Define' },
-    { id: 'measure', name: 'Measure' },
-    { id: 'analyze', name: 'Analyze' },
-    { id: 'improve', name: 'Improve' },
-    { id: 'control', name: 'Control' }
-  ];
-  
-  // Cargar proyecto
-  useEffect(() => {
-    const projectData = getProject(projectId);
-    if (projectData) {
-      setProject(projectData);
-    }
-  }, [projectId, getProject]);
-  
-  // Filtrar herramientas
-  const filteredTools = tools.filter(tool => {
-    // Filtrar por fase
-    if (selectedPhase !== 'all' && tool.phase.toLowerCase() !== selectedPhase) {
-      return false;
-    }
-    
-    // Filtrar por búsqueda
-    if (searchTerm && !tool.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !tool.description.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
-    
-    // Verificar si la herramienta ya está en el proyecto
-    const isInProject = project?.tools && project.tools[tool.id];
-    return !isInProject;
-  });
-  
-  // Manejar cambio en la selección
-  const handleToolSelect = (toolId) => {
-    setSelectedTools(prev => {
-      if (prev.includes(toolId)) {
-        return prev.filter(id => id !== toolId);
-      } else {
-        return [...prev, toolId];
+  const [notice, setNotice] = useState(null);
+
+  const planEntries = project?.tools || {};
+
+  const filteredTools = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return tools.filter((tool) => {
+      if (selectedPhase !== 'all' && tool.phase !== selectedPhase) return false;
+      if (
+        term &&
+        !tool.name.toLowerCase().includes(term) &&
+        !tool.description.toLowerCase().includes(term)
+      ) {
+        return false;
       }
+      return true;
     });
+  }, [tools, searchTerm, selectedPhase]);
+
+  const toggleTool = (toolId) => {
+    if (planEntries[toolId]) return; // ya está en el plan: no seleccionable
+    setSelectedIds((prev) => (prev.includes(toolId) ? prev.filter((id) => id !== toolId) : [...prev, toolId]));
   };
-  
-  // Añadir herramientas seleccionadas al proyecto
-  const handleAddTools = () => {
-    if (!project || selectedTools.length === 0) return;
-    
+
+  const handleAdd = () => {
+    if (!project || selectedIds.length === 0) return;
     setIsSubmitting(true);
-    
-    // Preparar objeto de herramientas actualizadas
-    const updatedTools = { ...project.tools };
-    
-    // Añadir nuevas herramientas
-    selectedTools.forEach(toolId => {
-      updatedTools[toolId] = { 
-        status: 'not_started',
-        updatedAt: new Date().toISOString()
-      };
-    });
-    
-    // Actualizar proyecto
-    updateProject(projectId, {
-      tools: updatedTools,
-      updatedAt: new Date().toISOString()
-    });
-    
-    // Notificar que se han añadido herramientas
+
+    const nowIso = new Date().toISOString();
+    const additions = Object.fromEntries(
+      selectedIds.map((id) => [id, { status: 'not_started', updatedAt: nowIso, notes: '' }])
+    );
+    updateProject(projectId, { tools: { ...project.tools, ...additions } });
+
+    const involvedPhases = [
+      ...new Set(selectedIds.map((id) => formatPhase(tools.find((t) => t.id === id)?.phase))),
+    ];
+    const message =
+      selectedIds.length === 1
+        ? `Herramienta agregada a la fase ${involvedPhases[0]}`
+        : `${selectedIds.length} herramientas agregadas al plan`;
+    setNotice({ message, type: 'success' });
+
+    // Deja ver la confirmación un momento antes de cerrar el modal.
     setTimeout(() => {
-      setIsSubmitting(false);
-      if (onToolAdded) onToolAdded(selectedTools);
-      if (onClose) onClose();
-    }, 800);
+      onToolAdded?.(selectedIds);
+      onClose?.();
+    }, 900);
   };
-  
-  // Variantes para animaciones
-  const formVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      scale: 1,
-      transition: {
-        duration: 0.3
-      }
-    }
-  };
-  
+
+  if (!project) return null;
+
   return (
-    <motion.div
-      variants={formVariants}
-      initial="hidden"
-      animate="visible"
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden max-w-4xl w-full"
-    >
-      {/* Cabecera */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
-          <Plus size={20} className="mr-2 text-blue-600 dark:text-blue-400" />
-          Añadir Herramientas al Proyecto
-        </h2>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          <X size={20} />
-        </button>
-      </div>
-      
-      {/* Filtros */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar herramientas..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          </div>
-          
-          <div className="flex items-center">
-            <Filter size={16} className="text-gray-500 dark:text-gray-400 mr-2" />
-            <span className="text-sm text-gray-600 dark:text-gray-300 mr-2">Fase:</span>
-            <div className="relative">
-              <select
-                value={selectedPhase}
-                onChange={(e) => setSelectedPhase(e.target.value)}
-                className="pl-3 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">Todas</option>
-                {phases.map(phase => (
-                  <option key={phase.id} value={phase.id.toLowerCase()}>
-                    {phase.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
+    <div className="flex max-h-[70vh] flex-col">
+      <Notification
+        message={notice?.message}
+        type={notice?.type || 'success'}
+        show={Boolean(notice)}
+        onClose={() => setNotice(null)}
+        duration={2000}
+      />
+
+      <div className="flex flex-col gap-3 border-b border-line-subtle pb-4 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-muted"
+            aria-hidden="true"
+          />
+          <label className="sr-only" htmlFor="add-tool-search">
+            Buscar herramientas
+          </label>
+          <input
+            id="add-tool-search"
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar herramientas…"
+            className="input w-full pl-9"
+          />
         </div>
+        <label className="flex items-center gap-2 text-sm text-content-secondary" htmlFor="add-tool-phase">
+          Fase
+          <select
+            id="add-tool-phase"
+            value={selectedPhase}
+            onChange={(e) => setSelectedPhase(e.target.value)}
+            className="input w-auto"
+          >
+            <option value="all">Todas</option>
+            {PHASE_ORDER.map((phase) => (
+              <option key={phase} value={phase}>
+                {phase}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      
-      {/* Lista de herramientas */}
-      <div className="overflow-y-auto max-h-96 p-6">
+
+      <div className="flex-1 overflow-y-auto py-4">
         {filteredTools.length === 0 ? (
-          <div className="text-center py-8">
-            <Info size={32} className="mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-            <p className="text-gray-600 dark:text-gray-400">
-              No se encontraron herramientas disponibles
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-              Prueba con otros criterios de búsqueda o fase
-            </p>
-          </div>
+          <p className="py-8 text-center text-sm text-content-secondary">
+            Ninguna herramienta coincide con la búsqueda o la fase seleccionada.
+          </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filteredTools.map(tool => (
-              <div
-                key={tool.id}
-                onClick={() => handleToolSelect(tool.id)}
-                className={`border ${selectedTools.includes(tool.id) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'} rounded-lg p-4 cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 transition-colors relative`}
-              >
-                <div className="flex items-start">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${selectedTools.includes(tool.id) ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                    {selectedTools.includes(tool.id) ? (
-                      <CheckCircle2 size={16} />
-                    ) : (
-                      <tool.icon size={16} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {filteredTools.map((tool) => {
+              const inPlan = Boolean(planEntries[tool.id]);
+              const selected = selectedIds.includes(tool.id);
+              return (
+                <button
+                  key={tool.id}
+                  type="button"
+                  disabled={inPlan}
+                  onClick={() => toggleTool(tool.id)}
+                  aria-pressed={selected}
+                  className={`rounded-lg border p-3 text-left transition-colors duration-fast ${
+                    inPlan
+                      ? 'cursor-not-allowed border-line-subtle bg-surface-sunken opacity-70'
+                      : selected
+                        ? 'border-brand bg-brand/5'
+                        : 'border-line hover:border-line-strong hover:bg-surface-sunken'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-content">{tool.name}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-content-secondary">{tool.description}</p>
+                    </div>
+                    {selected && !inPlan && (
+                      <CheckCircle2 size={18} className="shrink-0 text-brand" aria-hidden="true" />
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-gray-800 dark:text-white">
-                      {tool.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mt-1">
-                      {tool.description}
-                    </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <PhaseBadge phase={tool.phase} size="xs" />
+                    {inPlan ? (
+                      <StatusBadge status={planEntries[tool.id].status} kind="tool" size="xs" />
+                    ) : selected ? (
+                      <span className="text-xs font-medium text-brand">Seleccionada</span>
+                    ) : null}
                   </div>
-                </div>
-                <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs py-1 px-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
-                    {tool.phase}
-                  </span>
-                  {selectedTools.includes(tool.id) && (
-                    <span className="text-xs text-blue-600 dark:text-blue-400">
-                      Seleccionada
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
-      
-      {/* Pie */}
-      <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-between">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          {selectedTools.length} herramienta(s) seleccionada(s)
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-          >
+
+      <div className="flex items-center justify-between gap-3 border-t border-line-subtle pt-4">
+        <p className="text-sm text-content-secondary">
+          {selectedIds.length} herramienta{selectedIds.length === 1 ? '' : 's'} seleccionada
+          {selectedIds.length === 1 ? '' : 's'}
+        </p>
+        <div className="flex gap-2">
+          <GradientButton variant="ghost" onClick={onClose}>
             Cancelar
-          </button>
-          <button
-            onClick={handleAddTools}
-            disabled={selectedTools.length === 0 || isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          </GradientButton>
+          <GradientButton
+            variant="solid"
+            onClick={handleAdd}
+            disabled={selectedIds.length === 0}
+            loading={isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Añadiendo...
-              </>
-            ) : (
-              <>
-                <Plus size={16} className="mr-1.5" /> Añadir Herramientas
-              </>
-            )}
-          </button>
+            Añadir al plan
+          </GradientButton>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
-};
-
-export default AddToolForm;
+}
