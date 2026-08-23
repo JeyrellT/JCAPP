@@ -3,52 +3,152 @@
 @tailwind utilities;
 
 :root {
-  /* Variables de color para tema claro */
-  --color-background: 240 249 255;
-  --color-foreground: 15 23 42;
-  --color-muted: 148 163 184;
-  --color-accent: 14 165 233;
-  --color-card: 255 255 255;
-  --color-card-foreground: 15 23 42;
-  --color-border: 226 232 240;
+  color-scheme: light;
+
+  --jc-bg-app: 251 252 253;
+  --jc-bg-subtle: 246 248 250;
+  --jc-surface: 255 255 255;
+  --jc-surface-raised: 255 255 255;
+  --jc-surface-sunken: 246 248 250;
+  --jc-line: 223 228 234;
+  --jc-line-subtle: 237 240 244;
+  --jc-line-strong: 199 206 216;
+  --jc-content: 20 26 34;
+  --jc-content-secondary: 77 87 102;
+  --jc-content-muted: 107 119 135;
+  --jc-content-inverse: 255 255 255;
+  --jc-brand: 12 124 114;
+  --jc-brand-hover: 10 99 92;
+  --jc-brand-contrast: 255 255 255;
+  --jc-ring: 12 124 114;
+
+  --jc-success: 18 121 58;    --jc-success-soft: 233 247 239;  --jc-success-on: 15 95 46;
+  --jc-warning: 184 106 0;    --jc-warning-soft: 254 246 231;  --jc-warning-on: 154 88 0;
+  --jc-danger: 185 28 28;     --jc-danger-soft: 254 236 236;   --jc-danger-on: 153 27 27;
+  --jc-info: 79 70 214;       --jc-info-soft: 224 228 255;     --jc-info-on: 63 53 180;
+
+  --jc-phase-define: 79 70 214;    --jc-phase-define-soft: 224 228 255;  --jc-phase-define-on: 63 53 180;
+  --jc-phase-measure: 14 116 144;  --jc-phase-measure-soft: 207 240 247; --jc-phase-measure-on: 17 94 117;
+  --jc-phase-analyze: 154 88 0;    --jc-phase-analyze-soft: 253 240 213; --jc-phase-analyze-on: 122 70 0;
+  --jc-phase-improve: 77 124 15;   --jc-phase-improve-soft: 232 242 214; --jc-phase-improve-on: 63 100 16;
+  --jc-phase-control: 126 34 206;  --jc-phase-control-soft: 241 226 253; --jc-phase-control-on: 107 33 168;
+
+  --jc-shadow-xs: 0 1px 2px 0 rgb(16 24 40 / .05);
+  --jc-shadow-sm: 0 1px 2px 0 rgb(16 24 40 / .06), 0 1px 3px 0 rgb(16 24 40 / .10);
+  --jc-shadow-md: 0 2px 4px -2px rgb(16 24 40 / .06), 0 4px 8px -2px rgb(16 24 40 / .10);
+  --jc-shadow-lg: 0 4px 6px -2px rgb(16 24 40 / .03), 0 12px 16px -4px rgb(16 24 40 / .08);
+  --jc-shadow-xl: 0 8px 8px -4px rgb(16 24 40 / .03), 0 20px 24px -4px rgb(16 24 40 / .08);
+  --jc-shadow-overlay: 0 32px 64px -12px rgb(16 24 40 / .24);
+
+  /* Alias legado — no eliminar en el Ciclo 1 */
+  --color-background: var(--jc-bg-app);
+  --color-foreground: var(--jc-content);
+  --color-muted: var(--jc-content-muted);
+  --color-accent: var(--jc-brand);
+  --color-card: var(--jc-surface);
+  --color-card-foreground: var(--jc-content);
+  --color-border: var(--jc-line);
 }
 
 .dark {
-  /* Variables de color para tema oscuro */
-  --color-background: 15 23 42;
-  --color-foreground: 248 250 252;
-  --color-muted: 148 163 184;
-  --color-accent: 14 165 233;
-  --color-card: 30 41 59;
-  --color-card-foreground: 248 250 252;
-  --color-border: 51 65 85;
+  color-scheme: dark;
+
+  --jc-bg-app: 12 17 22;
+  --jc-bg-subtle: 17 24 32;
+  --jc-surface: 20 26 34;
+  --jc-surface-raised: 27 34 43;
+  --jc-surface-sunken: 15 21 28;
+  --jc-line: 36 44 56;
+  --jc-line-subtle: 27 34 43;
+  --jc-line-strong: 57 66 78;
+  --jc-content: 232 236 241;
+  --jc-content-secondary: 182 192 205;
+  --jc-content-muted: 150 161 176;
+  --jc-content-inverse: 12 17 22;
+  --jc-brand: 56 190 175;
+  --jc-brand-hover: 111 216 201;
+  --jc-brand-contrast: 4 39 38;
+  --jc-ring: 56 190 175;
+
+  --jc-success: 74 222 128;   --jc-success-soft: 14 42 24;   --jc-success-on: 134 239 172;
+  --jc-warning: 251 191 36;   --jc-warning-soft: 58 42 8;    --jc-warning-on: 252 211 77;
+  --jc-danger: 248 113 113;   --jc-danger-soft: 59 20 20;    --jc-danger-on: 252 165 165;
+  --jc-info: 129 137 246;     --jc-info-soft: 33 31 69;      --jc-info-on: 180 186 251;
+
+  --jc-phase-define: 129 137 246;  --jc-phase-define-soft: 33 31 69;   --jc-phase-define-on: 180 186 251;
+  --jc-phase-measure: 56 189 248;  --jc-phase-measure-soft: 14 44 60;  --jc-phase-measure-on: 125 211 252;
+  --jc-phase-analyze: 251 191 36;  --jc-phase-analyze-soft: 58 42 8;   --jc-phase-analyze-on: 252 211 77;
+  --jc-phase-improve: 163 201 72;  --jc-phase-improve-soft: 34 48 14;  --jc-phase-improve-on: 190 221 122;
+  --jc-phase-control: 192 132 252; --jc-phase-control-soft: 44 21 65;  --jc-phase-control-on: 216 180 254;
+
+  --jc-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / .45);
+  --jc-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / .45), 0 1px 3px 0 rgb(0 0 0 / .45);
+  --jc-shadow-md: inset 0 1px 0 0 rgb(255 255 255 / .05), 0 2px 4px -2px rgb(0 0 0 / .45), 0 4px 8px -2px rgb(0 0 0 / .45);
+  --jc-shadow-lg: inset 0 1px 0 0 rgb(255 255 255 / .05), 0 4px 6px -2px rgb(0 0 0 / .40), 0 12px 16px -4px rgb(0 0 0 / .45);
+  --jc-shadow-xl: inset 0 1px 0 0 rgb(255 255 255 / .05), 0 8px 8px -4px rgb(0 0 0 / .40), 0 20px 24px -4px rgb(0 0 0 / .45);
+  --jc-shadow-overlay: inset 0 1px 0 0 rgb(255 255 255 / .05), 0 32px 64px -12px rgb(0 0 0 / .60);
+
+  /* Alias legado — no eliminar en el Ciclo 1 */
+  --color-background: var(--jc-bg-app);
+  --color-foreground: var(--jc-content);
+  --color-muted: var(--jc-content-muted);
+  --color-accent: var(--jc-brand);
+  --color-card: var(--jc-surface);
+  --color-card-foreground: var(--jc-content);
+  --color-border: var(--jc-line);
 }
 
-body {
-  @apply font-sans antialiased;
-  color: rgb(var(--color-foreground));
-  background-color: rgb(var(--color-background));
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-app text-content font-sans antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--jc-ring));
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: rgb(var(--jc-brand) / .18);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* Estilos adicionales para scrollbar personalizada */
+/* Scrollbar personalizada, sobre tokens (no gray-*) */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-800;
+  background: rgb(var(--jc-bg-subtle));
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  background: rgb(var(--jc-line-strong));
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  background: rgb(var(--jc-content-muted));
 }
 
-/* Animaciones personalizadas */
+/* Animaciones heredadas — en uso en herramientas fuera de este carril, no eliminar */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -75,57 +175,29 @@ body {
   animation: fadeInOut 3s ease-in-out;
 }
 
-/* Clases de utilidad personalizadas */
+/* Clases de utilidad reutilizables, reescritas sobre tokens */
 @layer components {
   .page-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+    @apply mx-auto w-full max-w-page px-4 sm:px-6 lg:px-8 py-8;
   }
-  
+
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden;
+    @apply bg-surface border border-line rounded-xl shadow-xs;
   }
-  
-  .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-colors;
+
+  .card-hover {
+    @apply transition-shadow duration-base hover:shadow-md;
   }
-  
-  .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white;
-  }
-  
-  .btn-secondary {
-    @apply bg-secondary-500 hover:bg-secondary-600 text-white;
-  }
-  
-  .btn-outline {
-    @apply border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700;
-  }
-  
+
   .input {
-    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
-    bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-    focus:outline-none focus:ring-2 focus:ring-primary-500;
+    @apply w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-content placeholder:text-content-muted;
   }
-  
+
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium;
   }
-  
-  .badge-primary {
-    @apply bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200;
-  }
-  
-  .badge-secondary {
-    @apply bg-secondary-100 dark:bg-secondary-900 text-secondary-800 dark:text-secondary-200;
-  }
-  
-  .tooltip {
-    @apply invisible absolute p-2 bg-black/75 text-white text-xs rounded 
-    pointer-events-none whitespace-nowrap z-50 
-    after:content-[''] after:absolute after:left-1/2 after:-ml-1 after:w-2 after:h-2 after:rotate-45 after:bg-black/75;
-  }
-  
-  .tooltip-trigger:hover .tooltip {
-    @apply visible;
+
+  .section-label {
+    @apply text-2xs font-semibold uppercase tracking-wider text-content-muted;
   }
 }

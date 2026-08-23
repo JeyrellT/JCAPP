@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -19,21 +19,21 @@ import { motion } from 'framer-motion';
 import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
 import GradientButton from '../components/common/GradientButton';
 
-// Importar componentes de herramientas
-import ProjectCharter from '../tools/ProjectCharter';
-import SipocViewer from '../tools/SipocViewer';
-import VocVisualizer from '../tools/VocVisualizer';
-import CtqDashboard from '../tools/CtqDashboard';
-import ValueStreamMap from '../tools/ValueStreamMap';
-import StakeholderAnalysis from '../tools/StakeholderAnalysis';
-import PriorizationMatrix from '../tools/PriorizationMatrix';
-import CauseEffectDiagram from '../tools/CauseEffectDiagram';
-import ParetoChart from '../tools/ParetoChart';
-import FmeaAnalysis from '../tools/FmeaAnalysis';
-import ControlChart from '../tools/ControlChart';
-import FiveS from '../tools/FiveS';
-import RoiCalculator from '../tools/RoiCalculator';
-import ProjectTimeline from '../tools/ProjectTimeline';
+// Importar componentes de herramientas (lazy: cada uno en su propio chunk)
+const ProjectCharter = lazy(() => import('../tools/ProjectCharter'));
+const SipocViewer = lazy(() => import('../tools/SipocViewer'));
+const VocVisualizer = lazy(() => import('../tools/VocVisualizer'));
+const CtqDashboard = lazy(() => import('../tools/CtqDashboard'));
+const ValueStreamMap = lazy(() => import('../tools/ValueStreamMap'));
+const StakeholderAnalysis = lazy(() => import('../tools/StakeholderAnalysis'));
+const PriorizationMatrix = lazy(() => import('../tools/PriorizationMatrix'));
+const CauseEffectDiagram = lazy(() => import('../tools/CauseEffectDiagram'));
+const ParetoChart = lazy(() => import('../tools/ParetoChart'));
+const FmeaAnalysis = lazy(() => import('../tools/FmeaAnalysis'));
+const ControlChart = lazy(() => import('../tools/ControlChart'));
+const FiveS = lazy(() => import('../tools/FiveS'));
+const RoiCalculator = lazy(() => import('../tools/RoiCalculator'));
+const ProjectTimeline = lazy(() => import('../tools/ProjectTimeline'));
 
 const ToolPage = () => {
   const { projectId, toolId } = useParams();
@@ -356,7 +356,17 @@ const ToolPage = () => {
           </div>
         ) : (
           <div className={`${isFullscreen ? 'h-[calc(100vh-80px)]' : 'h-[calc(80vh-120px)]'} overflow-auto`}>
-            {renderToolComponent()}
+            <Suspense
+              fallback={
+                <div className="p-8 space-y-4">
+                  <div className="h-8 w-1/3 rounded-md bg-surface animate-pulse" />
+                  <div className="h-40 w-full rounded-md bg-surface animate-pulse" />
+                  <div className="h-40 w-full rounded-md bg-surface animate-pulse" />
+                </div>
+              }
+            >
+              {renderToolComponent()}
+            </Suspense>
           </div>
         )}
       </motion.div>

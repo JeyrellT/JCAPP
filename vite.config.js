@@ -2,9 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: '/JCAPP/',  // Add base path for GitHub Pages
+  // En dev servimos en la raiz para que el basename de BrowserRouter case sin friccion;
+  // en build mantenemos el base de GitHub Pages que espera deploy-to-gh-pages.ps1 (/JCAPP/).
+  base: command === 'build' ? '/JCAPP/' : '/',
   server: {
     port: 3000,
     open: true,
@@ -16,4 +18,4 @@ export default defineConfig({
       interval: 100
     }
   },
-})
+}))

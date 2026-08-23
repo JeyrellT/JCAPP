@@ -154,7 +154,7 @@ const ProjectsPage = () => {
             </p>
           </div>
           
-          <GradientButton to="/new-project" className="flex items-center">
+          <GradientButton to="/projects/new" className="flex items-center">
             <PlusCircle size={16} className="mr-2" /> Nuevo Proyecto
           </GradientButton>
         </div>

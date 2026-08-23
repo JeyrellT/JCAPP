@@ -1,87 +1,146 @@
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 /**
- * Componente para mostrar una tarjeta de estadística
- * 
- * @param {Object} props - Propiedades del componente
+ * Tarjeta de estadística (KPI) del sistema de diseño de JC Analytic.
+ *
+ * @param {Object} props
  * @param {string} props.title - Título de la estadística
  * @param {string|number} props.value - Valor de la estadística
  * @param {React.ReactNode} props.icon - Icono para la estadística
- * @param {string} [props.color="teal"] - Color del icono (teal, blue, green, purple, red, orange)
- * @param {string} [props.description] - Descripción opcional
- * @param {number} [props.trend] - Tendencia del valor (positivo o negativo)
+ * @param {string} [props.color="teal"] - Tono del icono. Acepta los tokens nuevos
+ *   (brand, info, success, warning, danger, neutral) y los valores heredados
+ *   (teal, blue, green, purple, red, orange), que se resuelven a los nuevos.
+ * @param {string} [props.description] - Descripción opcional bajo el valor
+ * @param {number} [props.trend] - Variación porcentual. Si es `undefined` no se
+ *   renderiza ninguna fila comparativa (no se inventan tendencias sin datos).
+ * @param {string} [props.trendLabel] - Etiqueta junto a la tendencia (p. ej.
+ *   "vs. mes anterior"). Solo se muestra si se pasa explícitamente.
+ * @param {string} [props.to] - Si se pasa, la tarjeta completa es un <Link> enfocable
+ * @param {boolean} [props.loading=false] - Muestra un esqueleto de carga
+ * @param {number[]} [props.sparkline] - Serie de valores para un mini gráfico de tendencia
  */
-const StatCard = ({ title, value, icon, color = "teal", description, trend }) => {
-  // Mapeo de colores
-  const colors = {
-    teal: {
-      bg: "bg-primary-100 dark:bg-primary-900/30",
-      text: "text-primary-600 dark:text-primary-400",
-      lighter: "text-primary-500",
-      gradient: "from-primary-500 to-primary-700"
-    },
-    blue: {
-      bg: "bg-blue-100 dark:bg-blue-900/30",
-      text: "text-blue-600 dark:text-blue-400",
-      lighter: "text-blue-500",
-      gradient: "from-blue-500 to-blue-700"
-    },
-    green: {
-      bg: "bg-green-100 dark:bg-green-900/30",
-      text: "text-green-600 dark:text-green-400",
-      lighter: "text-green-500",
-      gradient: "from-green-500 to-green-700"
-    },
-    purple: {
-      bg: "bg-purple-100 dark:bg-purple-900/30",
-      text: "text-purple-600 dark:text-purple-400",
-      lighter: "text-purple-500",
-      gradient: "from-purple-500 to-purple-700"
-    },
-    red: {
-      bg: "bg-red-100 dark:bg-red-900/30",
-      text: "text-red-600 dark:text-red-400",
-      lighter: "text-red-500",
-      gradient: "from-red-500 to-red-700"
-    },
-    orange: {
-      bg: "bg-orange-100 dark:bg-orange-900/30",
-      text: "text-orange-600 dark:text-orange-400",
-      lighter: "text-orange-500",
-      gradient: "from-orange-500 to-orange-700"
-    }
-  };
 
-  // Obtener el conjunto de colores
-  const colorSet = colors[color] || colors.teal;
+// Mapa estático de tonos sobre tokens (Tailwind no detecta clases dinámicas).
+const COLOR_STYLES = {
+  brand: { bg: 'bg-brand/10', text: 'text-brand' },
+  info: { bg: 'bg-info-soft', text: 'text-info-on' },
+  success: { bg: 'bg-success-soft', text: 'text-success-on' },
+  warning: { bg: 'bg-warning-soft', text: 'text-warning-on' },
+  danger: { bg: 'bg-danger-soft', text: 'text-danger-on' },
+  neutral: { bg: 'bg-surface-sunken', text: 'text-content-secondary' },
+};
+
+// Alias heredados: no rompen los usos existentes de color="blue"/"green"/etc.
+const COLOR_ALIASES = {
+  teal: 'brand',
+  blue: 'info',
+  green: 'success',
+  purple: 'info',
+  red: 'danger',
+  orange: 'warning',
+};
+
+function Sparkline({ data }) {
+  if (!Array.isArray(data) || data.length < 2) return null;
+
+  const width = 100;
+  const height = 40;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const points = data
+    .map((d, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((d - min) / range) * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 transition-all duration-300 hover:shadow-lg">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-800 dark:text-white">{value}</p>
-          
-          {description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>
-          )}
-          
+    <div className="mt-3 h-10 w-full" aria-hidden="true">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-full w-full overflow-visible">
+        <polyline
+          points={points}
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="stroke-brand"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-5 shadow-xs">
+      <div className="flex items-start justify-between">
+        <div className="w-2/3 space-y-2.5">
+          <div className="h-3.5 w-24 animate-pulse rounded bg-surface-sunken" />
+          <div className="h-7 w-16 animate-pulse rounded bg-surface-sunken" />
+          <div className="h-3 w-20 animate-pulse rounded bg-surface-sunken" />
+        </div>
+        <div className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-surface-sunken" />
+      </div>
+    </div>
+  );
+}
+
+const StatCard = ({
+  title,
+  value,
+  icon,
+  color = 'teal',
+  description,
+  trend,
+  trendLabel,
+  to,
+  loading = false,
+  sparkline,
+}) => {
+  if (loading) return <StatCardSkeleton />;
+
+  const colorSet = COLOR_STYLES[COLOR_ALIASES[color] || color] || COLOR_STYLES.brand;
+  const isNavigable = Boolean(to);
+  const Wrapper = isNavigable ? Link : 'div';
+  const wrapperProps = isNavigable ? { to } : {};
+
+  const trendTone = trend > 0 ? 'text-success' : trend < 0 ? 'text-danger' : 'text-content-muted';
+  const TrendIcon = trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
+
+  return (
+    <Wrapper
+      {...wrapperProps}
+      className={`group block rounded-xl border border-line bg-surface p-5 shadow-xs transition-all duration-base ease-standard ${
+        isNavigable ? 'hover:-translate-y-px hover:shadow-md focus-visible:-translate-y-px focus-visible:shadow-md' : ''
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-content-muted">{title}</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-content">{value}</p>
+
+          {description && <p className="mt-1 text-xs text-content-muted">{description}</p>}
+
           {trend !== undefined && (
-            <div className="flex items-center mt-2">
-              <span className={`flex items-center text-xs ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {trend >= 0 ? <ArrowUp size={12} className="mr-1" /> : <ArrowDown size={12} className="mr-1" />}
-                {Math.abs(trend)}%
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums ${trendTone}`}>
+                <TrendIcon size={12} />
+                {trend > 0 ? '+' : ''}
+                {trend}%
               </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">vs mes anterior</span>
+              {trendLabel && <span className="text-xs text-content-muted">{trendLabel}</span>}
             </div>
           )}
         </div>
-        
-        <div className={`p-3 rounded-full ${colorSet.bg} ${colorSet.text}`}>
-          {icon}
-        </div>
+
+        <div className={`shrink-0 rounded-full p-3 ${colorSet.bg} ${colorSet.text}`}>{icon}</div>
       </div>
-    </div>
+
+      <Sparkline data={sparkline} />
+    </Wrapper>
   );
 };
 
