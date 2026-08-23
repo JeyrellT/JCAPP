@@ -1,822 +1,777 @@
-import html2canvas from 'html2canvas';
-
-import { useState, useEffect, useRef } from 'react';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
-import { motion } from 'framer-motion';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-  Save,
-  Edit,
   Plus,
   Trash2,
-  Download,
   HelpCircle,
-  CheckSquare,
   ListFilter,
   Filter,
   Copy,
   ArrowUpRight,
   Square,
-  Move
+  Move,
+  Check,
+  Loader2,
+  AlertTriangle,
+  Sparkles,
+  X,
 } from 'lucide-react';
 
-/**
- * Componente Matriz de Priorización
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- */
-const PriorizationMatrix = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  const matrixRef = useRef(null);
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatRelative } from '../lib/format';
+import { transition, fadeInUp } from '../lib/motion';
 
-  // Estado para la matriz de priorización
-  const [priorityMatrix, setPriorityMatrix] = useState(() => {
-    return project?.priorityMatrix || {
-      criteria: [],
-      options: [],
-      weights: {},
-      scores: {}
+const TOOL_ID = 'prioritization-matrix';
+
+// Forma canónica: fijada por la semilla de src/data/projects.js, NO por el
+// estado interno original del componente (que usaba criterios/opciones como
+// objetos con peso y mapas de puntuación por id). `criteria` es un array de
+// nombres; cada iniciativa lleva un array de puntuaciones alineado por índice
+// a `criteria`, más el total (suma simple, sin ponderar).
+const DEFAULT_DATA = {
+  criteria: [],
+  initiatives: [],
+};
+
+const SCORE_OPTIONS = [1, 2, 3, 4, 5];
+
+const recalcTotal = (scores) => scores.reduce((sum, s) => sum + (Number(s) || 0), 0);
+
+/**
+ * Rescate de datos legacy: antes de este ciclo el componente escribía en
+ * `project.priorityMatrix` con un modelo distinto (criterios como objetos con
+ * peso, opciones con mapa de puntuaciones por id). Se traduce a la forma
+ * canónica simple (nombres + arrays de puntuación) para no perder el trabajo
+ * de quien ya tenía algo guardado.
+ */
+function legacyRescue(project) {
+  const legacy = project?.priorityMatrix;
+  if (!legacy || !Array.isArray(legacy.criteria) || legacy.criteria.length === 0) return null;
+
+  const criteriaNames = legacy.criteria.map((c) => (typeof c === 'string' ? c : c?.name || ''));
+
+  // Ya viene en forma canónica (criterios como strings, sin `options`/`scores` legacy).
+  if (typeof legacy.criteria[0] === 'string') {
+    return {
+      criteria: criteriaNames,
+      initiatives: Array.isArray(legacy.initiatives) ? legacy.initiatives : [],
     };
+  }
+
+  const initiatives = (legacy.options || []).map((opt) => {
+    const scores = legacy.criteria.map((c) => {
+      const raw = legacy.scores?.[opt.id]?.[c.id];
+      return typeof raw === 'number' ? raw : 0;
+    });
+    return { name: opt.name || 'Sin nombre', scores, total: recalcTotal(scores) };
   });
 
-  // Estados de UI
-  const [editMode, setEditMode] = useState(!project?.priorityMatrix);
-  const [activeTab, setActiveTab] = useState('matrix');
-  const [showHelp, setShowHelp] = useState(false);
-  const [draggedOption, setDraggedOption] = useState(null);
+  return { criteria: criteriaNames, initiatives };
+}
 
-  // Actualizar el proyecto cuando cambia la matriz
+const TABS = [
+  { id: 'criteria', label: 'Criterios', Icon: Filter },
+  { id: 'initiatives', label: 'Iniciativas', Icon: Square },
+  { id: 'matrix', label: 'Matriz', Icon: Move },
+  { id: 'ranking', label: 'Ranking', Icon: ArrowUpRight },
+];
+
+const scoreTone = (score, max) => {
+  if (max <= 0) return 'bg-surface-sunken text-content-muted';
+  const ratio = score / max;
+  if (ratio >= 0.7) return 'bg-success-soft text-success-on';
+  if (ratio >= 0.4) return 'bg-warning-soft text-warning-on';
+  return 'bg-danger-soft text-danger-on';
+};
+
+/** Estado de guardado, calculado — nunca simulado con setTimeout. */
+function SaveStatus({ t }) {
+  const [, forceTick] = useState(0);
+
+  // Un único intervalo para refrescar el texto relativo ("hace 3 minutos"),
+  // que de otro modo se congela hasta el próximo render.
   useEffect(() => {
-    if (!editMode && project) {
-      updateProject(projectId, { priorityMatrix });
-    }
-  }, [editMode]);
+    const id = setInterval(() => forceTick((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
 
-  // Función para añadir un nuevo criterio
+  let icon = <span className="h-2 w-2 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let tone = 'text-content-muted';
+  let extra = null;
+
+  if (t.error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    tone = 'text-danger-on';
+    extra = (
+      <button
+        type="button"
+        onClick={() => t.save()}
+        className="ml-2 underline decoration-dotted underline-offset-2 hover:text-danger-on"
+      >
+        Reintentar
+      </button>
+    );
+  } else if (t.isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    tone = 'text-content-secondary';
+  } else if (t.justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    tone = 'text-success-on';
+  } else if (t.isDirty) {
+    icon = <span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    tone = 'text-warning-on';
+  } else if (t.lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(t.lastSavedAt)}`;
+    tone = 'text-success-on';
+  }
+
+  return (
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm ${tone}`}>
+      {icon}
+      <span>{text}</span>
+      {extra}
+    </p>
+  );
+}
+
+const PriorizationMatrix = ({ projectId }) => {
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, { legacy: legacyRescue });
+  const shouldReduceMotion = useReducedMotion();
+
+  const [activeTab, setActiveTab] = useState('criteria');
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Modo ejemplo: el hook no lo gestiona (loadExample nunca guarda). Se
+  // recuerda el borrador previo para poder "Deshacer".
+  const [exampleActive, setExampleActive] = useState(false);
+  const exampleSnapshotRef = useRef(null);
+
+  // Confirmaciones — siempre vía Modal, nunca window.confirm/alert.
+  const [confirmExample, setConfirmExample] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const { criteria, initiatives } = t.data;
+  const maxPossible = criteria.length * 5;
+  const isEmpty = criteria.length === 0 && initiatives.length === 0;
+  const exampleTitle = t.exampleTitles?.[0] || 'Ejemplo';
+
+  const rankedInitiatives = useMemo(
+    () => [...initiatives].sort((a, b) => b.total - a.total),
+    [initiatives]
+  );
+
+  if (!t.ready) return null;
+
+  // --- Criterios -------------------------------------------------------
   const addCriterion = () => {
-    const newCriterion = {
-      id: `criterion-${Date.now()}`,
-      name: 'Nuevo Criterio',
-      description: '',
-      weight: 5
-    };
-    
-    const newWeights = { ...priorityMatrix.weights };
-    newWeights[newCriterion.id] = newCriterion.weight;
-    
-    setPriorityMatrix(prev => ({
+    t.setData((prev) => ({
       ...prev,
-      criteria: [...prev.criteria, newCriterion],
-      weights: newWeights
+      criteria: [...prev.criteria, ''],
+      initiatives: prev.initiatives.map((init) => {
+        const scores = [...init.scores, 3];
+        return { ...init, scores, total: recalcTotal(scores) };
+      }),
+    }));
+    setActiveTab('criteria');
+  };
+
+  const updateCriterionName = (index, name) => {
+    t.setData((prev) => ({
+      ...prev,
+      criteria: prev.criteria.map((c, i) => (i === index ? name : c)),
     }));
   };
 
-  // Función para actualizar un criterio
-  const updateCriterion = (id, data) => {
-    setPriorityMatrix(prev => {
-      const updatedCriteria = prev.criteria.map(criterion => 
-        criterion.id === id ? { ...criterion, ...data } : criterion
-      );
-      
-      // Si cambia el peso, actualizamos también el objeto de pesos
-      const updatedWeights = { ...prev.weights };
-      if (data.weight !== undefined) {
-        updatedWeights[id] = data.weight;
-      }
-      
-      return {
-        ...prev,
-        criteria: updatedCriteria,
-        weights: updatedWeights
-      };
-    });
-  };
-
-  // Función para eliminar un criterio
-  const deleteCriterion = (id) => {
-    setPriorityMatrix(prev => {
-      // Eliminamos el criterio del array
-      const updatedCriteria = prev.criteria.filter(criterion => criterion.id !== id);
-      
-      // Eliminamos los pesos y puntuaciones relacionados
-      const updatedWeights = { ...prev.weights };
-      delete updatedWeights[id];
-      
-      const updatedScores = { ...prev.scores };
-      Object.keys(updatedScores).forEach(optionId => {
-        if (updatedScores[optionId] && updatedScores[optionId][id]) {
-          delete updatedScores[optionId][id];
-        }
-      });
-      
-      return {
-        ...prev,
-        criteria: updatedCriteria,
-        weights: updatedWeights,
-        scores: updatedScores
-      };
-    });
-  };
-
-  // Función para añadir una nueva opción
-  const addOption = () => {
-    const newOption = {
-      id: `option-${Date.now()}`,
-      name: 'Nueva Opción',
-      description: '',
-      category: 'General'
-    };
-    
-    // Inicializamos las puntuaciones para esta opción
-    const updatedScores = { ...priorityMatrix.scores };
-    updatedScores[newOption.id] = {};
-    priorityMatrix.criteria.forEach(criterion => {
-      updatedScores[newOption.id][criterion.id] = 3; // Valor por defecto
-    });
-    
-    setPriorityMatrix(prev => ({
+  const removeCriterion = (index) => {
+    t.setData((prev) => ({
       ...prev,
-      options: [...prev.options, newOption],
-      scores: updatedScores
+      criteria: prev.criteria.filter((_, i) => i !== index),
+      initiatives: prev.initiatives.map((init) => {
+        const scores = init.scores.filter((_, i) => i !== index);
+        return { ...init, scores, total: recalcTotal(scores) };
+      }),
     }));
   };
 
-  // Función para actualizar una opción
-  const updateOption = (id, data) => {
-    setPriorityMatrix(prev => ({
+  // --- Iniciativas -------------------------------------------------------
+  const addInitiative = () => {
+    t.setData((prev) => {
+      const scores = prev.criteria.map(() => 3);
+      return {
+        ...prev,
+        initiatives: [...prev.initiatives, { name: 'Nueva iniciativa', scores, total: recalcTotal(scores) }],
+      };
+    });
+    setActiveTab('initiatives');
+  };
+
+  const updateInitiativeName = (index, name) => {
+    t.setData((prev) => ({
       ...prev,
-      options: prev.options.map(option => 
-        option.id === id ? { ...option, ...data } : option
-      )
+      initiatives: prev.initiatives.map((init, i) => (i === index ? { ...init, name } : init)),
     }));
   };
 
-  // Función para eliminar una opción
-  const deleteOption = (id) => {
-    setPriorityMatrix(prev => {
-      // Eliminamos la opción del array
-      const updatedOptions = prev.options.filter(option => option.id !== id);
-      
-      // Eliminamos las puntuaciones relacionadas
-      const updatedScores = { ...prev.scores };
-      delete updatedScores[id];
-      
+  const removeInitiative = (index) => {
+    t.setData((prev) => ({
+      ...prev,
+      initiatives: prev.initiatives.filter((_, i) => i !== index),
+    }));
+  };
+
+  const cloneInitiative = (index) => {
+    t.setData((prev) => {
+      const source = prev.initiatives[index];
+      if (!source) return prev;
       return {
         ...prev,
-        options: updatedOptions,
-        scores: updatedScores
+        initiatives: [
+          ...prev.initiatives,
+          { ...source, name: `${source.name} (copia)`, scores: [...source.scores] },
+        ],
       };
     });
   };
 
-  // Función para actualizar una puntuación
-  const updateScore = (optionId, criterionId, score) => {
-    setPriorityMatrix(prev => {
-      const updatedScores = { ...prev.scores };
-      
-      if (!updatedScores[optionId]) {
-        updatedScores[optionId] = {};
-      }
-      
-      updatedScores[optionId][criterionId] = parseInt(score);
-      
-      return {
-        ...prev,
-        scores: updatedScores
-      };
-    });
+  const updateScore = (initiativeIndex, criterionIndex, value) => {
+    t.setData((prev) => ({
+      ...prev,
+      initiatives: prev.initiatives.map((init, i) => {
+        if (i !== initiativeIndex) return init;
+        const scores = init.scores.map((s, ci) => (ci === criterionIndex ? Number(value) : s));
+        return { ...init, scores, total: recalcTotal(scores) };
+      }),
+    }));
   };
 
-  // Función para normalizar los pesos de los criterios (sumar 100%)
-  const normalizeWeights = () => {
-    const totalWeight = priorityMatrix.criteria.reduce((sum, criterion) => sum + criterion.weight, 0);
-    
-    if (totalWeight === 0) return;
-    
-    setPriorityMatrix(prev => {
-      const updatedCriteria = prev.criteria.map(criterion => ({
-        ...criterion,
-        weight: Math.round((criterion.weight / totalWeight) * 100)
-      }));
-      
-      const updatedWeights = {};
-      updatedCriteria.forEach(criterion => {
-        updatedWeights[criterion.id] = criterion.weight;
-      });
-      
-      return {
-        ...prev,
-        criteria: updatedCriteria,
-        weights: updatedWeights
-      };
-    });
-  };
-
-  // Función para calcular la puntuación total ponderada para una opción
-  const calculateWeightedScore = (optionId) => {
-    if (!priorityMatrix.scores[optionId]) return 0;
-    
-    let totalScore = 0;
-    let totalWeight = 0;
-    
-    priorityMatrix.criteria.forEach(criterion => {
-      const weight = priorityMatrix.weights[criterion.id] || 0;
-      const score = priorityMatrix.scores[optionId][criterion.id] || 0;
-      
-      totalScore += weight * score;
-      totalWeight += weight;
-    });
-    
-    return totalWeight === 0 ? 0 : Math.round((totalScore / totalWeight) * 10) / 10;
-  };
-
-  // Obtener opciones ordenadas por puntuación
-  const getRankedOptions = () => {
-    return [...priorityMatrix.options]
-      .map(option => ({
-        ...option,
-        score: calculateWeightedScore(option.id)
-      }))
-      .sort((a, b) => b.score - a.score);
-  };
-
-  // Función para exportar la matriz como imagen
-  const exportAsImage = async () => {
-    if (matrixRef.current) {
-      try {
-        const canvas = await html2canvas(matrixRef.current, {
-          backgroundColor: null,
-          scale: 2
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.href = imgData;
-        link.download = `priority_matrix_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`;
-        link.click();
-      } catch (error) {
-        console.error('Error al exportar la imagen:', error);
-      }
+  // --- Modo ejemplo --------------------------------------------------------
+  const requestLoadExample = () => {
+    if (t.isDirty) {
+      setConfirmExample(true);
+    } else {
+      applyExample();
     }
   };
 
-  // Crear un nuevo criterio copiando uno existente
-  const cloneCriterion = (criterionId) => {
-    const sourceCriterion = priorityMatrix.criteria.find(c => c.id === criterionId);
-    if (!sourceCriterion) return;
-    
-    const newCriterion = {
-      ...sourceCriterion,
-      id: `criterion-${Date.now()}`,
-      name: `${sourceCriterion.name} (Copia)`
-    };
-    
-    const newWeights = { ...priorityMatrix.weights };
-    newWeights[newCriterion.id] = newCriterion.weight;
-    
-    setPriorityMatrix(prev => ({
-      ...prev,
-      criteria: [...prev.criteria, newCriterion],
-      weights: newWeights
-    }));
+  const applyExample = () => {
+    exampleSnapshotRef.current = t.data;
+    t.loadExample(0);
+    setExampleActive(true);
+    setConfirmExample(false);
+    setActiveTab('matrix');
   };
 
-  // Crear una nueva opción copiando una existente
-  const cloneOption = (optionId) => {
-    const sourceOption = priorityMatrix.options.find(o => o.id === optionId);
-    if (!sourceOption) return;
-    
-    const newOption = {
-      ...sourceOption,
-      id: `option-${Date.now()}`,
-      name: `${sourceOption.name} (Copia)`
-    };
-    
-    // Copiar también las puntuaciones
-    const updatedScores = { ...priorityMatrix.scores };
-    updatedScores[newOption.id] = { ...updatedScores[optionId] };
-    
-    setPriorityMatrix(prev => ({
-      ...prev,
-      options: [...prev.options, newOption],
-      scores: updatedScores
-    }));
+  const adoptExample = () => {
+    t.save();
+    setExampleActive(false);
   };
 
-  // Renderizar tabla de criterios
-  const renderCriteriaTable = () => {
-    return (
-      <div className="overflow-x-auto mt-4">
-        <table className="min-w-full bg-white border">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="py-2 px-3 border text-left">Criterio</th>
-              <th className="py-2 px-3 border text-left">Descripción</th>
-              <th className="py-2 px-3 border text-center">Peso</th>
-              {editMode && <th className="py-2 px-3 border text-center">Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {priorityMatrix.criteria.length === 0 ? (
-              <tr>
-                <td colSpan={editMode ? 4 : 3} className="py-4 px-3 border text-center text-gray-500">
-                  No hay criterios definidos. {editMode && "Haz clic en 'Añadir' para crear uno."}
-                </td>
-              </tr>
-            ) : (
-              priorityMatrix.criteria.map(criterion => (
-                <tr key={criterion.id} className="hover:bg-gray-50">
-                  {editMode ? (
-                    <>
-                      <td className="py-2 px-3 border">
-                        <input
-                          type="text"
-                          className="w-full p-1 border rounded"
-                          value={criterion.name}
-                          onChange={(e) => updateCriterion(criterion.id, { name: e.target.value })}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border">
-                        <textarea
-                          className="w-full p-1 border rounded"
-                          value={criterion.description}
-                          onChange={(e) => updateCriterion(criterion.id, { description: e.target.value })}
-                          rows={2}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border text-center">
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          className="w-16 p-1 border rounded text-center"
-                          value={criterion.weight}
-                          onChange={(e) => updateCriterion(criterion.id, { weight: parseInt(e.target.value) || 1 })}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => cloneCriterion(criterion.id)}
-                            className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                            title="Duplicar"
-                          >
-                            <Copy size={18} />
-                          </button>
-                          <button
-                            onClick={() => deleteCriterion(criterion.id)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="py-2 px-3 border">{criterion.name}</td>
-                      <td className="py-2 px-3 border">{criterion.description}</td>
-                      <td className="py-2 px-3 border text-center">
-                        <span className="inline-block px-2 py-1 rounded bg-blue-100 text-blue-800">
-                          {criterion.weight}
-                        </span>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        
-        {editMode && priorityMatrix.criteria.length > 0 && (
-          <div className="mt-2 flex justify-end">
-            <button
-              onClick={normalizeWeights}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 py-1 px-3 rounded inline-flex items-center text-sm"
-            >
-              <ListFilter size={14} className="mr-1" />
-              Normalizar Pesos
-            </button>
-          </div>
-        )}
-      </div>
-    );
+  const discardExample = () => {
+    if (exampleSnapshotRef.current) t.setData(exampleSnapshotRef.current);
+    setExampleActive(false);
   };
 
-  // Renderizar tabla de opciones
-  const renderOptionsTable = () => {
-    return (
-      <div className="overflow-x-auto mt-4">
-        <table className="min-w-full bg-white border">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="py-2 px-3 border text-left">Opción</th>
-              <th className="py-2 px-3 border text-left">Descripción</th>
-              <th className="py-2 px-3 border text-left">Categoría</th>
-              {!editMode && <th className="py-2 px-3 border text-center">Puntuación</th>}
-              {editMode && <th className="py-2 px-3 border text-center">Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {priorityMatrix.options.length === 0 ? (
-              <tr>
-                <td colSpan={editMode ? 4 : 4} className="py-4 px-3 border text-center text-gray-500">
-                  No hay opciones definidas. {editMode && "Haz clic en 'Añadir' para crear una."}
-                </td>
-              </tr>
-            ) : (
-              priorityMatrix.options.map(option => (
-                <tr key={option.id} className="hover:bg-gray-50">
-                  {editMode ? (
-                    <>
-                      <td className="py-2 px-3 border">
-                        <input
-                          type="text"
-                          className="w-full p-1 border rounded"
-                          value={option.name}
-                          onChange={(e) => updateOption(option.id, { name: e.target.value })}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border">
-                        <textarea
-                          className="w-full p-1 border rounded"
-                          value={option.description}
-                          onChange={(e) => updateOption(option.id, { description: e.target.value })}
-                          rows={2}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border">
-                        <input
-                          type="text"
-                          className="w-full p-1 border rounded"
-                          value={option.category}
-                          onChange={(e) => updateOption(option.id, { category: e.target.value })}
-                        />
-                      </td>
-                      <td className="py-2 px-3 border">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => cloneOption(option.id)}
-                            className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                            title="Duplicar"
-                          >
-                            <Copy size={18} />
-                          </button>
-                          <button
-                            onClick={() => deleteOption(option.id)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="py-2 px-3 border">{option.name}</td>
-                      <td className="py-2 px-3 border">{option.description}</td>
-                      <td className="py-2 px-3 border">{option.category}</td>
-                      <td className="py-2 px-3 border text-center">
-                        <span className={`inline-block px-2 py-1 rounded font-medium ${
-                          calculateWeightedScore(option.id) >= 7 ? 'bg-green-100 text-green-800' :
-                          calculateWeightedScore(option.id) >= 4 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {calculateWeightedScore(option.id)}
-                        </span>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  // Renderizar la matriz de puntuación
-  const renderScoringMatrix = () => {
-    if (priorityMatrix.criteria.length === 0 || priorityMatrix.options.length === 0) {
-      return (
-        <div className="bg-gray-50 p-4 rounded-lg text-center text-gray-500">
-          Necesitas definir criterios y opciones para poder puntuar.
-        </div>
-      );
-    }
-    
-    return (
-      <div className="overflow-x-auto mt-4">
-        <table className="min-w-full bg-white border">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="py-2 px-3 border"></th>
-              {priorityMatrix.criteria.map(criterion => (
-                <th key={criterion.id} className="py-2 px-3 border text-center">
-                  <div className="font-medium">{criterion.name}</div>
-                  <div className="text-xs text-gray-500">Peso: {criterion.weight}</div>
-                </th>
-              ))}
-              <th className="py-2 px-3 border text-center bg-gray-200">Puntuación Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {priorityMatrix.options.map(option => (
-              <tr key={option.id} className="hover:bg-gray-50">
-                <td className="py-2 px-3 border font-medium">{option.name}</td>
-                {priorityMatrix.criteria.map(criterion => (
-                  <td key={criterion.id} className="py-2 px-3 border text-center">
-                    {editMode ? (
-                      <select
-                        className="w-16 p-1 border rounded text-center"
-                        value={priorityMatrix.scores[option.id]?.[criterion.id] || 0}
-                        onChange={(e) => updateScore(option.id, criterion.id, e.target.value)}
-                      >
-                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => (
-                          <option key={score} value={score}>{score}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className={`inline-block w-8 h-8 rounded-full flex items-center justify-center ${
-                        (priorityMatrix.scores[option.id]?.[criterion.id] || 0) >= 7 ? 'bg-green-100 text-green-800' :
-                        (priorityMatrix.scores[option.id]?.[criterion.id] || 0) >= 4 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {priorityMatrix.scores[option.id]?.[criterion.id] || 0}
-                      </span>
-                    )}
-                  </td>
-                ))}
-                <td className="py-2 px-3 border text-center bg-gray-100 font-bold">
-                  {calculateWeightedScore(option.id)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  // Renderizar el ranking de opciones
-  const renderRanking = () => {
-    if (priorityMatrix.options.length === 0) {
-      return (
-        <div className="bg-gray-50 p-4 rounded-lg text-center text-gray-500">
-          No hay opciones para mostrar en el ranking.
-        </div>
-      );
-    }
-    
-    const rankedOptions = getRankedOptions();
-    const maxScore = Math.max(...rankedOptions.map(option => option.score), 1);
-    
-    return (
-      <div className="mt-4" ref={matrixRef}>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-semibold mb-4 flex items-center">
-            <ArrowUpRight className="mr-2" size={20} />
-            Ranking de Opciones
-          </h3>
-          
-          <div className="space-y-4">
-            {rankedOptions.map((option, index) => {
-              let barColor = 'bg-green-500';
-              if (option.score < 4) barColor = 'bg-red-500';
-              else if (option.score < 7) barColor = 'bg-yellow-500';
-              
-              return (
-                <div key={option.id} className="relative">
-                  <div className="flex items-center mb-1">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-bold mr-2">
-                      {index + 1}
-                    </div>
-                    <div className="font-medium">{option.name}</div>
-                    <div className="ml-auto font-bold">{option.score}</div>
-                  </div>
-                  
-                  <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${barColor} rounded-full`}
-                      style={{ width: `${(option.score / 10) * 100}%` }}
-                    ></div>
-                  </div>
-                  
-                  {option.category && (
-                    <div className="mt-1 text-xs text-gray-500">
-                      Categoría: {option.category}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        
-        <div className="bg-white p-4 rounded-lg shadow-sm border mt-4">
-          <h3 className="text-lg font-semibold mb-2">Leyenda de Puntuación</h3>
-          <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center">
-              <div className="w-4 h-4 bg-green-500 rounded mr-1"></div>
-              <span>Alto (7-10)</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 bg-yellow-500 rounded mr-1"></div>
-              <span>Medio (4-6)</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 bg-red-500 rounded mr-1"></div>
-              <span>Bajo (0-3)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Panel de ayuda
-  const renderHelpPanel = () => {
-    if (!showHelp) return null;
-    
-    return (
-      <div className="absolute top-20 right-4 bg-white p-4 rounded-lg shadow-lg w-80 z-50">
-        <h3 className="font-bold text-lg mb-2 flex items-center">
-          <HelpCircle size={18} className="mr-2" />
-          Ayuda de la Matriz de Priorización
-        </h3>
-        
-        <div className="space-y-2 text-sm">
-          <p><strong>Criterios:</strong> Define los factores por los que evaluarás las opciones.</p>
-          <p><strong>Peso:</strong> Asigna importancia relativa a cada criterio (1-10).</p>
-          <p><strong>Opciones:</strong> Alternativas que deseas evaluar y comparar.</p>
-          <p><strong>Puntuación:</strong> Califica cada opción según cada criterio (0-10).</p>
-          <p className="text-blue-600 font-medium mt-2">Pasos recomendados:</p>
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Define los criterios de evaluación y sus pesos.</li>
-            <li>Añade las opciones a evaluar.</li>
-            <li>Califica cada opción para cada criterio.</li>
-            <li>Revisa el ranking para tomar decisiones.</li>
-          </ol>
-        </div>
-        
-        <button 
-          className="mt-3 w-full bg-gray-200 hover:bg-gray-300 py-1 px-2 rounded"
-          onClick={() => setShowHelp(false)}
-        >
-          Cerrar
-        </button>
-      </div>
-    );
+  // --- Cancelar --------------------------------------------------------
+  const requestDiscard = () => setConfirmDiscard(true);
+  const confirmDiscardChanges = () => {
+    t.discard();
+    setConfirmDiscard(false);
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 h-full">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold flex items-center">
-          <CheckSquare className="mr-2" />
-          Matriz de Priorización
-        </h2>
-        
-        <div className="flex gap-2">
-          <button
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-            onClick={() => setShowHelp(!showHelp)}
-            title="Ayuda"
-          >
-            <HelpCircle size={20} />
-          </button>
-          
-          {activeTab === 'ranking' && (
-            <button
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-              onClick={exportAsImage}
-              title="Exportar como imagen"
-            >
-              <Download size={20} />
-            </button>
+    <div className="p-4 sm:p-6">
+      {/* Barra de estado y guardado — equivalente local a ToolToolbar (no
+          existía en src/components/tools/ al momento de este ciclo). */}
+      <div className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus t={t} />
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && !exampleActive && (
+            <GradientButton variant="outline" size="sm" onClick={requestLoadExample}>
+              Ver un ejemplo
+            </GradientButton>
           )}
-          
           <button
-            className={`p-2 rounded ${editMode ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
-            onClick={() => setEditMode(!editMode)}
+            type="button"
+            onClick={() => setShowHelp((v) => !v)}
+            aria-label="Ayuda de la matriz de priorización"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-content-secondary hover:bg-surface-sunken hover:text-content"
           >
-            {editMode ? (
-              <>
-                <Save size={18} className="mr-1 inline" />
-                <span>Guardar</span>
-              </>
-            ) : (
-              <>
-                <Edit size={18} className="mr-1 inline" />
-                <span>Editar</span>
-              </>
-            )}
+            <HelpCircle size={18} aria-hidden="true" />
           </button>
+          {t.isDirty && !exampleActive && (
+            <GradientButton variant="ghost" size="sm" onClick={requestDiscard}>
+              Cancelar
+            </GradientButton>
+          )}
+          <GradientButton
+            variant="success"
+            size="sm"
+            disabled={!t.isDirty || t.isSaving || exampleActive}
+            onClick={() => t.save()}
+          >
+            Guardar
+          </GradientButton>
         </div>
       </div>
-      
-      {renderHelpPanel()}
-      
-      {/* Tabs para navegar entre las diferentes vistas */}
-      <div className="border-b border-gray-200 mb-4">
-        <nav className="flex -mb-px">
-          <button
-            className={`py-2 px-4 font-medium text-sm border-b-2 ${
-              activeTab === 'criteria'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-            onClick={() => setActiveTab('criteria')}
+
+      {/* Banner de modo ejemplo */}
+      <AnimatePresence>
+        {exampleActive && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
+            transition={transition.base}
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/40 bg-brand/5 px-4 py-3"
           >
-            <Filter size={16} className="inline mr-1" />
-            Criterios
-          </button>
-          
-          <button
-            className={`py-2 px-4 font-medium text-sm border-b-2 ${
-              activeTab === 'options'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-            onClick={() => setActiveTab('options')}
-          >
-            <Square size={16} className="inline mr-1" />
-            Opciones
-          </button>
-          
-          <button
-            className={`py-2 px-4 font-medium text-sm border-b-2 ${
-              activeTab === 'matrix'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-            onClick={() => setActiveTab('matrix')}
-          >
-            <Move size={16} className="inline mr-1" />
-            Matriz
-          </button>
-          
-          <button
-            className={`py-2 px-4 font-medium text-sm border-b-2 ${
-              activeTab === 'ranking'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-            onClick={() => setActiveTab('ranking')}
-          >
-            <ArrowUpRight size={16} className="inline mr-1" />
-            Ranking
-          </button>
-        </nav>
-      </div>
-      
-      {/* Contenido según la pestaña activa */}
-      <div className="relative">
-        {activeTab === 'criteria' && (
-          <>
-            {editMode && (
-              <div className="mb-4">
-                <button
-                  onClick={addCriterion}
-                  className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded inline-flex items-center"
-                >
-                  <Plus size={16} className="mr-1" />
-                  Añadir Criterio
-                </button>
-              </div>
-            )}
-            
-            {renderCriteriaTable()}
-          </>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand">
+                <Sparkles size={12} aria-hidden="true" />
+                Ejemplo
+              </span>
+              <span className="font-medium text-content">{exampleTitle}</span>
+              <span className="text-content-secondary">
+                Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <GradientButton variant="solid" size="sm" onClick={adoptExample}>
+                Usar como punto de partida
+              </GradientButton>
+              <GradientButton variant="ghost" size="sm" onClick={discardExample}>
+                Deshacer
+              </GradientButton>
+            </div>
+          </motion.div>
         )}
-        
-        {activeTab === 'options' && (
-          <>
-            {editMode && (
-              <div className="mb-4">
-                <button
-                  onClick={addOption}
-                  className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded inline-flex items-center"
-                >
-                  <Plus size={16} className="mr-1" />
-                  Añadir Opción
-                </button>
-              </div>
-            )}
-            
-            {renderOptionsTable()}
-          </>
+      </AnimatePresence>
+
+      {/* Panel de ayuda */}
+      <AnimatePresence>
+        {showHelp && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
+            transition={transition.base}
+            className="relative z-20 mb-6 w-full max-w-md rounded-lg border border-line bg-surface p-4 shadow-md sm:absolute sm:right-6"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 font-semibold text-content">
+                <HelpCircle size={16} aria-hidden="true" />
+                Ayuda de la Matriz de Priorización
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowHelp(false)}
+                aria-label="Cerrar ayuda"
+                className="rounded p-1 text-content-muted hover:bg-surface-sunken hover:text-content"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-content-secondary">
+              <p><strong className="text-content">Criterios:</strong> los factores por los que evaluarás las iniciativas.</p>
+              <p><strong className="text-content">Iniciativas:</strong> las alternativas que deseas comparar.</p>
+              <p><strong className="text-content">Puntuación:</strong> califica cada iniciativa por criterio, de 1 a 5.</p>
+              <p className="mt-2 font-medium text-brand">Pasos recomendados:</p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>Define los criterios de evaluación.</li>
+                <li>Añade las iniciativas a evaluar.</li>
+                <li>Califica cada iniciativa para cada criterio.</li>
+                <li>Revisa el ranking para tomar decisiones.</li>
+              </ol>
+            </div>
+          </motion.div>
         )}
-        
-        {activeTab === 'matrix' && renderScoringMatrix()}
-        
-        {activeTab === 'ranking' && renderRanking()}
-      </div>
+      </AnimatePresence>
+
+      {isEmpty ? (
+        <EmptyState
+          title="No todo pesa igual"
+          description="Define tus criterios, pondéralos y puntúa cada alternativa."
+          action={<GradientButton onClick={addCriterion}>Definir criterios</GradientButton>}
+          secondaryAction={
+            t.hasExamples && (
+              <GradientButton variant="outline" onClick={requestLoadExample}>
+                Ver un ejemplo
+              </GradientButton>
+            )
+          }
+        />
+      ) : (
+        <div className={exampleActive ? 'space-y-6 rounded-lg ring-1 ring-brand/30' : 'space-y-6'}>
+          {/* Navegación por pestañas */}
+          <div className="border-b border-line">
+            <nav className="-mb-px flex flex-wrap gap-1">
+              {TABS.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveTab(id)}
+                  className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium ${
+                    activeTab === id
+                      ? 'border-brand text-brand'
+                      : 'border-transparent text-content-secondary hover:border-line hover:text-content'
+                  }`}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'criteria' && (
+            <motion.div
+              initial={shouldReduceMotion ? false : fadeInUp.hidden}
+              animate={fadeInUp.visible}
+              transition={transition.base}
+            >
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <GradientButton size="sm" leadingIcon={<Plus size={16} aria-hidden="true" />} onClick={addCriterion}>
+                  Añadir criterio
+                </GradientButton>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-line">
+                <table className="min-w-full divide-y divide-line">
+                  <thead className="bg-surface-sunken">
+                    <tr>
+                      <th scope="col" className="px-3 py-2 text-left text-sm font-medium text-content-secondary">
+                        Criterio
+                      </th>
+                      <th scope="col" className="w-24 px-3 py-2 text-center text-sm font-medium text-content-secondary">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {criteria.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="px-3 py-6 text-center text-sm text-content-muted">
+                          No hay criterios definidos. Haz clic en &ldquo;Añadir criterio&rdquo; para crear uno.
+                        </td>
+                      </tr>
+                    ) : (
+                      criteria.map((criterion, index) => (
+                        <tr key={index}>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={criterion}
+                              placeholder="Nombre del criterio"
+                              onChange={(e) => updateCriterionName(index, e.target.value)}
+                              className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-content focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeCriterion(index)}
+                              aria-label={`Eliminar criterio ${criterion || index + 1}`}
+                              className="rounded p-1.5 text-danger-on hover:bg-danger-soft"
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {criteria.length > 1 && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-content-muted">
+                  <ListFilter size={12} aria-hidden="true" />
+                  Cada iniciativa se puntúa de 1 a 5 en cada criterio; el total es la suma simple.
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'initiatives' && (
+            <motion.div
+              initial={shouldReduceMotion ? false : fadeInUp.hidden}
+              animate={fadeInUp.visible}
+              transition={transition.base}
+            >
+              <div className="mb-4">
+                <GradientButton size="sm" leadingIcon={<Plus size={16} aria-hidden="true" />} onClick={addInitiative}>
+                  Añadir iniciativa
+                </GradientButton>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-line">
+                <table className="min-w-full divide-y divide-line">
+                  <thead className="bg-surface-sunken">
+                    <tr>
+                      <th scope="col" className="px-3 py-2 text-left text-sm font-medium text-content-secondary">
+                        Iniciativa
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-center text-sm font-medium text-content-secondary">
+                        Puntuación total
+                      </th>
+                      <th scope="col" className="w-24 px-3 py-2 text-center text-sm font-medium text-content-secondary">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {initiatives.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-6 text-center text-sm text-content-muted">
+                          No hay iniciativas definidas. Haz clic en &ldquo;Añadir iniciativa&rdquo; para crear una.
+                        </td>
+                      </tr>
+                    ) : (
+                      initiatives.map((initiative, index) => (
+                        <tr key={index}>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={initiative.name}
+                              onChange={(e) => updateInitiativeName(index, e.target.value)}
+                              className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-content focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block rounded px-2 py-1 text-sm font-medium tabular-nums ${scoreTone(initiative.total, maxPossible)}`}>
+                              {initiative.total}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => cloneInitiative(index)}
+                                aria-label={`Duplicar iniciativa ${initiative.name}`}
+                                className="rounded p-1.5 text-content-secondary hover:bg-surface-sunken hover:text-content"
+                              >
+                                <Copy size={16} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeInitiative(index)}
+                                aria-label={`Eliminar iniciativa ${initiative.name}`}
+                                className="rounded p-1.5 text-danger-on hover:bg-danger-soft"
+                              >
+                                <Trash2 size={16} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'matrix' && (
+            <motion.div
+              initial={shouldReduceMotion ? false : fadeInUp.hidden}
+              animate={fadeInUp.visible}
+              transition={transition.base}
+            >
+              {criteria.length === 0 || initiatives.length === 0 ? (
+                <div className="rounded-lg border border-line-subtle bg-surface-sunken p-4 text-center text-sm text-content-muted">
+                  Necesitas definir criterios e iniciativas para poder puntuar.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-line">
+                  <table className="min-w-full divide-y divide-line">
+                    <thead className="bg-surface-sunken">
+                      <tr>
+                        <th scope="col" className="px-3 py-2 text-left text-sm font-medium text-content-secondary">
+                          Iniciativa
+                        </th>
+                        {criteria.map((criterion, ci) => (
+                          <th key={ci} scope="col" className="px-3 py-2 text-center text-sm font-medium text-content-secondary">
+                            {criterion || `Criterio ${ci + 1}`}
+                          </th>
+                        ))}
+                        <th scope="col" className="bg-surface-sunken px-3 py-2 text-center text-sm font-semibold text-content">
+                          Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {initiatives.map((initiative, ii) => (
+                        <tr key={ii}>
+                          <td className="px-3 py-2 font-medium text-content">{initiative.name}</td>
+                          {criteria.map((criterion, ci) => (
+                            <td key={ci} className="px-3 py-2 text-center">
+                              <select
+                                value={initiative.scores[ci] ?? 3}
+                                onChange={(e) => updateScore(ii, ci, e.target.value)}
+                                aria-label={`Puntuación de ${initiative.name} en ${criterion || `criterio ${ci + 1}`}`}
+                                className="w-16 rounded-md border border-line bg-surface px-1 py-1 text-center text-sm tabular-nums text-content focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                              >
+                                {SCORE_OPTIONS.map((score) => (
+                                  <option key={score} value={score}>
+                                    {score}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block rounded px-2 py-1 text-sm font-bold tabular-nums ${scoreTone(initiative.total, maxPossible)}`}>
+                              {initiative.total}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'ranking' && (
+            <motion.div
+              initial={shouldReduceMotion ? false : fadeInUp.hidden}
+              animate={fadeInUp.visible}
+              transition={transition.base}
+              className="space-y-6"
+            >
+              {initiatives.length === 0 ? (
+                <div className="rounded-lg border border-line-subtle bg-surface-sunken p-4 text-center text-sm text-content-muted">
+                  No hay iniciativas para mostrar en el ranking.
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-line bg-surface p-4">
+                    <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-content">
+                      <ArrowUpRight size={18} aria-hidden="true" />
+                      Ranking de iniciativas
+                    </h3>
+                    <div className="space-y-4">
+                      {rankedInitiatives.map((initiative, index) => {
+                        const ratio = maxPossible > 0 ? initiative.total / maxPossible : 0;
+                        const barTone =
+                          ratio >= 0.7 ? 'bg-success' : ratio >= 0.4 ? 'bg-warning' : 'bg-danger';
+                        return (
+                          <div key={`${initiative.name}-${index}`}>
+                            <div className="mb-1 flex items-center gap-2">
+                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
+                                {index + 1}
+                              </div>
+                              <div className="font-medium text-content">{initiative.name}</div>
+                              <div className="ml-auto font-bold tabular-nums text-content">{initiative.total}</div>
+                            </div>
+                            <div className="h-3 overflow-hidden rounded-full bg-surface-sunken">
+                              <div
+                                className={`h-full rounded-full ${barTone}`}
+                                style={{ width: `${Math.min(ratio, 1) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Vista de tabla equivalente, para lectores de pantalla y usuarios de teclado. */}
+                  <div className="overflow-x-auto rounded-lg border border-line">
+                    <table className="min-w-full divide-y divide-line">
+                      <caption className="sr-only">Tabla de ranking de iniciativas por puntuación total</caption>
+                      <thead className="bg-surface-sunken">
+                        <tr>
+                          <th scope="col" className="px-3 py-2 text-left text-sm font-medium text-content-secondary">
+                            #
+                          </th>
+                          <th scope="col" className="px-3 py-2 text-left text-sm font-medium text-content-secondary">
+                            Iniciativa
+                          </th>
+                          <th scope="col" className="px-3 py-2 text-center text-sm font-medium text-content-secondary">
+                            Puntuación total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {rankedInitiatives.map((initiative, index) => (
+                          <tr key={`${initiative.name}-table-${index}`}>
+                            <td className="px-3 py-2 text-content-secondary tabular-nums">{index + 1}</td>
+                            <td className="px-3 py-2 font-medium text-content">{initiative.name}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`inline-block rounded px-2 py-1 text-sm font-medium tabular-nums ${scoreTone(initiative.total, maxPossible)}`}>
+                                {initiative.total}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="rounded-lg border border-line bg-surface p-4">
+                    <h3 className="mb-2 text-sm font-semibold text-content">Leyenda de puntuación</h3>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-content-secondary">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3 w-3 rounded bg-success" aria-hidden="true" /> Alto (≥70%)
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3 w-3 rounded bg-warning" aria-hidden="true" /> Medio (40–69%)
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3 w-3 rounded bg-danger" aria-hidden="true" /> Bajo (&lt;40%)
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+        </div>
+      )}
+
+      {/* Confirmación: cargar ejemplo con borrador sucio */}
+      <Modal
+        open={confirmExample}
+        onClose={() => setConfirmExample(false)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmExample(false)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton variant="solid" onClick={applyExample}>
+              Ver el ejemplo
+            </GradientButton>
+          </>
+        }
+      />
+
+      {/* Confirmación: descartar cambios sin guardar */}
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmDiscard(false)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton variant="danger" onClick={confirmDiscardChanges}>
+              Descartar
+            </GradientButton>
+          </>
+        }
+      />
     </div>
   );
 };

@@ -1,760 +1,751 @@
-import { useState, useEffect, useRef } from 'react';
-import { 
-  LineChart, 
-  Save, 
-  Edit, 
-  Plus, 
-  Trash2, 
-  Activity, 
-  Calendar, 
-  Filter,
-  Download, 
-  Upload,
-  Maximize2,
-  Minimize2,
-  Info,
+import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Plus,
+  Trash2,
   Check,
-  X,
+  Loader2,
+  AlertTriangle,
+  Eye,
+  Undo2,
+  Download,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Info,
 } from 'lucide-react';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatNumber, formatRelative } from '../lib/format';
+import { transition, fadeInUp } from '../lib/motion';
+
+const TOOL_ID = 'control-chart';
+
+// Forma completa del estado vacío, alineada a la semilla de src/data/projects.js
+// (measurements es un arreglo plano de números, en el orden de la muestra).
+const DEFAULT_DATA = {
+  metricName: '',
+  centerLine: 0,
+  upperControlLimit: 0,
+  lowerControlLimit: 0,
+  measurements: [],
+  outOfControl: false,
+};
+
+function computeOutOfControl(measurements, upperControlLimit, lowerControlLimit) {
+  return measurements.some(
+    (v) => Number(v) > Number(upperControlLimit) || Number(v) < Number(lowerControlLimit)
+  );
+}
+
+/** Recalcula `outOfControl` a partir de mediciones y límites. Se usa en cada edición. */
+function withOutOfControl(next) {
+  return {
+    ...next,
+    outOfControl: computeOutOfControl(next.measurements, next.upperControlLimit, next.lowerControlLimit),
+  };
+}
 
 /**
- * Componente para visualizar Control Charts (gráficos de control)
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
+ * Rescate de datos legacy: antes este componente escribía en `project.controlChart`
+ * con forma { title, metric, unit, target, upperLimit, lowerLimit, data:[{id,date,value}] }.
+ * Se invoca solo si `tools['control-chart'].data` está vacío.
  */
-const ControlChart = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  const chartRef = useRef(null);
-  
-  // Estados locales
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeTab, setActiveTab] = useState('chart'); // 'chart', 'data', 'settings'
-  const [editingDataPoint, setEditingDataPoint] = useState(null);
-  const [newDataPoint, setNewDataPoint] = useState({ date: '', value: '' });
-  const [chartData, setChartData] = useState({
-    title: 'Gráfico de Control',
-    metric: 'Tiempo de Ciclo',
-    unit: 'minutos',
-    target: 10,
-    upperLimit: 13,
-    lowerLimit: 7,
-    data: [
-      { id: '1', date: '2025-01-01', value: 9.5 },
-      { id: '2', date: '2025-01-08', value: 10.2 },
-      { id: '3', date: '2025-01-15', value: 8.7 },
-      { id: '4', date: '2025-01-22', value: 11.3 },
-      { id: '5', date: '2025-01-29', value: 9.8 },
-      { id: '6', date: '2025-02-05', value: 10.5 },
-      { id: '7', date: '2025-02-12', value: 12.1 },
-      { id: '8', date: '2025-02-19', value: 9.2 },
-      { id: '9', date: '2025-02-26', value: 10.0 },
-      { id: '10', date: '2025-03-05', value: 8.5 }
-    ]
-  });
-  
-  // Cargar datos del proyecto
-  useEffect(() => {
-    if (project && project.controlChart) {
-      setChartData(project.controlChart);
-    }
-  }, [project]);
+function legacyControlChart(project) {
+  const legacy = project?.controlChart;
+  if (!legacy) return null;
+  const measurements = Array.isArray(legacy.data) ? legacy.data.map((d) => Number(d.value) || 0) : [];
+  if (measurements.length === 0 && !legacy.metric && !legacy.title) return null;
+  const upperControlLimit = Number(legacy.upperLimit) || 0;
+  const lowerControlLimit = Number(legacy.lowerLimit) || 0;
+  return {
+    metricName: legacy.metric || legacy.title || '',
+    centerLine: Number(legacy.target) || 0,
+    upperControlLimit,
+    lowerControlLimit,
+    measurements,
+    outOfControl: computeOutOfControl(measurements, upperControlLimit, lowerControlLimit),
+  };
+}
 
-  // Calcular estadísticas del gráfico
-  const calculateStats = () => {
-    if (!chartData.data || chartData.data.length === 0) {
-      return { mean: 0, stdDev: 0, max: 0, min: 0 };
-    }
+function calculateStats(measurements) {
+  if (!measurements || measurements.length === 0) return { mean: 0, stdDev: 0, max: 0, min: 0 };
+  const values = measurements.map((v) => Number(v) || 0);
+  const sum = values.reduce((acc, v) => acc + v, 0);
+  const mean = sum / values.length;
+  const variance = values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / values.length;
+  return { mean, stdDev: Math.sqrt(variance), max: Math.max(...values), min: Math.min(...values) };
+}
 
-    const values = chartData.data.map(d => parseFloat(d.value));
-    const sum = values.reduce((acc, val) => acc + val, 0);
-    const mean = sum / values.length;
-    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-    const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / values.length;
-    const stdDev = Math.sqrt(variance);
-    const max = Math.max(...values);
-    const min = Math.min(...values);
+export default function ControlChart({ projectId }) {
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, { legacy: legacyControlChart });
+  const shouldReduceMotion = useReducedMotion();
 
-    return { mean, stdDev, max, min };
+  const [exampleMode, setExampleMode] = useState(false);
+  const [confirmKind, setConfirmKind] = useState(null); // 'example' | 'discard' | null
+  const exampleSnapshotRef = useRef(null);
+  const [newValue, setNewValue] = useState('');
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
+
+  const stats = useMemo(() => calculateStats(t.data.measurements), [t.data.measurements]);
+
+  if (!t.ready) return null;
+
+  const isEmpty = t.data.measurements.length === 0;
+  const { metricName, centerLine, upperControlLimit, lowerControlLimit, measurements } = t.data;
+
+  // --- Edición de mediciones ---------------------------------------------
+  const addMeasurement = () => {
+    const value = Number(newValue);
+    if (newValue === '' || Number.isNaN(value)) return;
+    t.setData((prev) => withOutOfControl({ ...prev, measurements: [...prev.measurements, value] }));
+    setNewValue('');
   };
 
-  const stats = calculateStats();
-
-  // Función para guardar cambios
-  const saveChanges = () => {
-    if (!project) return;
-    
-    setIsSaving(true);
-    
-    // Guardar los cambios al proyecto
-    updateProject(projectId, {
-      ...project,
-      controlChart: chartData
-    });
-    
-    // Simular tiempo de guardado
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsEditing(false);
-    }, 800);
+  const startEditMeasurement = (index) => {
+    setEditingIndex(index);
+    setEditingValue(String(measurements[index]));
   };
 
-  // Función para alternar el modo pantalla completa
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
+  const saveEditMeasurement = () => {
+    const value = Number(editingValue);
+    if (Number.isNaN(value) || editingIndex === null) return;
+    t.setData((prev) =>
+      withOutOfControl({
+        ...prev,
+        measurements: prev.measurements.map((v, i) => (i === editingIndex ? value : v)),
+      })
+    );
+    setEditingIndex(null);
+    setEditingValue('');
   };
 
-  // Función para añadir un nuevo punto de datos
-  const addDataPoint = () => {
-    if (!newDataPoint.date || !newDataPoint.value) return;
-    
-    const value = parseFloat(newDataPoint.value);
-    if (isNaN(value)) return;
-    
-    setChartData(prev => ({
-      ...prev,
-      data: [
-        ...prev.data,
-        {
-          id: Date.now().toString(),
-          date: newDataPoint.date,
-          value: value
-        }
-      ].sort((a, b) => new Date(a.date) - new Date(b.date)) // Ordenar por fecha
-    }));
-    
-    setNewDataPoint({ date: '', value: '' });
+  const removeMeasurement = (index) => {
+    t.setData((prev) =>
+      withOutOfControl({ ...prev, measurements: prev.measurements.filter((_, i) => i !== index) })
+    );
+    if (editingIndex === index) setEditingIndex(null);
   };
 
-  // Función para editar un punto de datos existente
-  const startEditDataPoint = (id) => {
-    const dataPoint = chartData.data.find(d => d.id === id);
-    if (!dataPoint) return;
-    
-    setEditingDataPoint({
-      id: dataPoint.id,
-      date: dataPoint.date,
-      value: dataPoint.value.toString()
-    });
+  const updateField = (field, rawValue) => {
+    t.setData((prev) => withOutOfControl({ ...prev, [field]: rawValue }));
   };
 
-  // Función para guardar un punto de datos editado
-  const saveDataPoint = () => {
-    if (!editingDataPoint) return;
-    
-    const value = parseFloat(editingDataPoint.value);
-    if (isNaN(value)) return;
-    
-    setChartData(prev => ({
-      ...prev,
-      data: prev.data.map(d => 
-        d.id === editingDataPoint.id 
-          ? { ...d, date: editingDataPoint.date, value: value }
-          : d
-      ).sort((a, b) => new Date(a.date) - new Date(b.date)) // Ordenar por fecha
-    }));
-    
-    setEditingDataPoint(null);
+  const updateLimit = (field, rawValue) => {
+    const value = Number(rawValue);
+    if (Number.isNaN(value)) return;
+    t.setData((prev) => withOutOfControl({ ...prev, [field]: value }));
   };
 
-  // Función para eliminar un punto de datos
-  const deleteDataPoint = (id) => {
-    setChartData(prev => ({
-      ...prev,
-      data: prev.data.filter(d => d.id !== id)
-    }));
-  };
-
-  // Función para actualizar los ajustes del gráfico
-  const updateChartSettings = (field, value) => {
-    if (field === 'target' || field === 'upperLimit' || field === 'lowerLimit') {
-      value = parseFloat(value);
-      if (isNaN(value)) return;
-    }
-    
-    setChartData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  // Función para exportar datos
-  const exportData = () => {
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + "Fecha,Valor\n" 
-      + chartData.data.map(row => `${row.date},${row.value}`).join("\n");
-    
+  // --- Exportar CSV --------------------------------------------------------
+  const exportCsv = () => {
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      'Muestra,Valor\n' +
+      measurements.map((value, i) => `${i + 1},${value}`).join('\n');
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `control_chart_${projectId}.csv`);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `grafico_control_${projectId}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
-  
-  // Si no hay proyecto, no mostrar nada
-  if (!project) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Cargando proyecto...</p>
-      </div>
-    );
-  }
 
-  // Clase condicional para el contenedor principal cuando está en pantalla completa
-  const containerClass = isFullscreen
-    ? "fixed inset-0 z-50 overflow-auto bg-white dark:bg-gray-900 p-4"
-    : "min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-gray-900 p-4";
+  // --- Modo ejemplo --------------------------------------------------------
+  const openExample = () => {
+    if (t.isDirty) {
+      setConfirmKind('example');
+      return;
+    }
+    applyExample();
+  };
+
+  const applyExample = () => {
+    exampleSnapshotRef.current = t.data;
+    const applied = t.loadExample(0);
+    if (applied) setExampleMode(true);
+    setConfirmKind(null);
+  };
+
+  const adoptExample = () => {
+    t.save();
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  const discardExample = () => {
+    if (exampleSnapshotRef.current) t.setData(exampleSnapshotRef.current);
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  // --- Cancelar / descartar cambios ----------------------------------------
+  const requestDiscard = () => {
+    if (!t.isDirty) return;
+    setConfirmKind('discard');
+  };
+
+  const confirmDiscard = () => {
+    t.discard();
+    setConfirmKind(null);
+  };
+
+  const exampleTitle = t.exampleTitles?.[0] || 'Ejemplo';
 
   return (
-    <div className={containerClass}>
-      <div className={`${isFullscreen ? '' : 'max-w-6xl mx-auto'}`}>
-        {/* Cabecera */}
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center">
-              <Activity className="mr-2" size={28} />
-              Gráfico de Control
-            </h1>
-            
-            <div className="flex space-x-2">
-              {!isEditing ? (
-                <>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-                  >
-                    <Edit size={16} className="mr-2" /> Editar
-                  </button>
-                  <button
-                    onClick={toggleFullscreen}
-                    className="p-2 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={saveChanges}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSaving ? (
-                      <>
-                        <span className="animate-spin mr-2">
-                          <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        </span>
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save size={16} className="mr-2" /> Guardar
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center"
-                  >
-                    <X size={16} className="mr-2" /> Cancelar
-                  </button>
-                  <button
-                    onClick={toggleFullscreen}
-                    className="p-2 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                </>
-              )}
+    <div className="p-4 sm:p-6">
+      {/* Barra de estado + acciones */}
+      <div className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus tool={t} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && (
+            <GradientButton
+              variant="outline"
+              size="sm"
+              onClick={openExample}
+              leadingIcon={<Eye size={14} aria-hidden="true" />}
+            >
+              Ver un ejemplo
+            </GradientButton>
+          )}
+          {!isEmpty && (
+            <GradientButton
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              leadingIcon={<Download size={14} aria-hidden="true" />}
+            >
+              Exportar CSV
+            </GradientButton>
+          )}
+          {t.isDirty && (
+            <GradientButton variant="ghost" size="sm" onClick={requestDiscard}>
+              Cancelar
+            </GradientButton>
+          )}
+          <GradientButton
+            variant="success"
+            size="sm"
+            disabled={!t.isDirty || t.isSaving}
+            onClick={() => t.save()}
+            leadingIcon={t.isSaving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+          >
+            Guardar
+          </GradientButton>
+        </div>
+      </div>
+
+      {/* Banner de modo ejemplo */}
+      <AnimatePresence>
+        {exampleMode && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.base}
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="rounded-full bg-info px-2 py-0.5 text-xs font-medium text-white">Ejemplo</span>
+              <span className="font-medium text-content">{exampleTitle}</span>
+              <span className="text-content-secondary">
+                Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.
+              </span>
             </div>
-          </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
-            <Info size={14} className="mr-1" />
-            Gráfico utilizado para monitorear la estabilidad de un proceso a lo largo del tiempo y detectar variaciones anómalas.
-          </p>
-        </div>
-        
-        {/* Pestañas de navegación */}
-        <div className="flex mb-6 border-b border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveTab('chart')}
-            className={`py-2 px-4 font-medium text-sm flex items-center ${
-              activeTab === 'chart'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
-          >
-            <Activity size={16} className="mr-2" /> Gráfico
-          </button>
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`py-2 px-4 font-medium text-sm flex items-center ${
-              activeTab === 'data'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
-          >
-            <Calendar size={16} className="mr-2" /> Datos
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`py-2 px-4 font-medium text-sm flex items-center ${
-              activeTab === 'settings'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
-          >
-            <Filter size={16} className="mr-2" /> Configuración
-          </button>
-        </div>
-        
-        {/* Contenido principal */}
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 min-h-[500px]">
-          <AnimatePresence mode="wait">
-            {activeTab === 'chart' && (
-              <motion.div 
-                key="chart"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="h-full"
+            <div className="flex items-center gap-2">
+              <GradientButton
+                variant="outline"
+                size="sm"
+                onClick={discardExample}
+                leadingIcon={<Undo2 size={14} aria-hidden="true" />}
               >
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                    {chartData.title}: {chartData.metric} ({chartData.unit})
-                  </h2>
-                  {!isEditing && (
-                    <button
-                      onClick={exportData}
-                      className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded flex items-center text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
-                    >
-                      <Download size={14} className="mr-1" /> Exportar CSV
-                    </button>
-                  )}
-                </div>
-                
-                {/* Visualización del gráfico de control */}
-                <div 
-                  ref={chartRef}
-                  className="w-full h-64 md:h-80 bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700 relative"
-                >
-                  {/* Representación visual del gráfico */}
-                  <div className="absolute inset-0 p-4">
-                    {/* Líneas de límite superior, objetivo y límite inferior */}
-                    <div className="absolute top-1/4 left-0 right-0 h-px bg-red-400 border-t border-dashed border-red-400 flex items-center justify-end">
-                      <span className="bg-red-100 text-red-800 text-xs px-1 py-0.5 rounded absolute right-0">UCL: {chartData.upperLimit} {chartData.unit}</span>
-                    </div>
-                    <div className="absolute top-1/2 left-0 right-0 h-px bg-green-500 border-t border-green-500 flex items-center justify-end">
-                      <span className="bg-green-100 text-green-800 text-xs px-1 py-0.5 rounded absolute right-0">Objetivo: {chartData.target} {chartData.unit}</span>
-                    </div>
-                    <div className="absolute top-3/4 left-0 right-0 h-px bg-red-400 border-t border-dashed border-red-400 flex items-center justify-end">
-                      <span className="bg-red-100 text-red-800 text-xs px-1 py-0.5 rounded absolute right-0">LCL: {chartData.lowerLimit} {chartData.unit}</span>
-                    </div>
-                    
-                    {/* Puntos de datos */}
-                    {chartData.data.length > 0 && (
-                      <>
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-between px-4 text-xs text-gray-500 dark:text-gray-400">
-                          {chartData.data.slice(0, 10).map((point, index) => (
-                            <div key={point.id} className="text-center">
-                              {new Date(point.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}
-                            </div>
-                          ))}
-                        </div>                        
-                        
-                        <svg className="w-full h-full" viewBox="0 0 1000 500" preserveAspectRatio="none">
-                          {/* Línea que conecta los puntos */}
-                          <polyline
-                            points={chartData.data.slice(0, 10).map((point, index) => {
-                              const x = (index / (chartData.data.length - 1 || 1)) * 1000;
-                              const range = chartData.upperLimit - chartData.lowerLimit;
-                              const normalized = (point.value - chartData.lowerLimit) / (range || 1);
-                              const y = 500 - (normalized * 400 + 50);
-                              return `${x},${y}`;
-                            }).join(' ')}
-                            fill="none"
-                            stroke="#3b82f6"
-                            strokeWidth="2"
-                          />
-                          
-                          {/* Puntos individuales */}
-                          {chartData.data.slice(0, 10).map((point, index) => {
-                            const x = (index / (chartData.data.length - 1 || 1)) * 1000;
-                            const range = chartData.upperLimit - chartData.lowerLimit;
-                            const normalized = (point.value - chartData.lowerLimit) / (range || 1);
-                            const y = 500 - (normalized * 400 + 50);
-                            
-                            // Determinar el color del punto según si está fuera de límites
-                            let color = "#3b82f6"; // Azul normal
-                            if (point.value > chartData.upperLimit) color = "#ef4444"; // Rojo para valores sobre el límite superior
-                            if (point.value < chartData.lowerLimit) color = "#ef4444"; // Rojo para valores bajo el límite inferior
-                            
-                            return (
-                              <g key={point.id}>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r="6"
-                                  fill={color}
-                                />
-                                <text
-                                  x={x}
-                                  y={y - 15}
-                                  textAnchor="middle"
-                                  fill="currentColor"
-                                  fontSize="12"
-                                  className="text-gray-700 dark:text-gray-300"
-                                >
-                                  {point.value}
-                                </text>
-                              </g>
-                            );
-                          })}
-                        </svg>
-                      </>
-                    )}
-                    
-                    {chartData.data.length === 0 && (
-                      <div className="flex items-center justify-center h-full">
-                        <p className="text-gray-500 dark:text-gray-400">
-                          No hay datos disponibles para mostrar
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Tarjetas de estadísticas */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                  <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-600">
-                    <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">Media</h3>
-                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.mean.toFixed(2)} {chartData.unit}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-600">
-                    <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">Desviación Estándar</h3>
-                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.stdDev.toFixed(2)} {chartData.unit}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-600">
-                    <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">Valor Máximo</h3>
-                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.max.toFixed(2)} {chartData.unit}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-600">
-                    <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">Valor Mínimo</h3>
-                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.min.toFixed(2)} {chartData.unit}</p>
-                  </div>
-                </div>
-                
-                {/* Observaciones y anomalías */}
-                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                  <h3 className="font-semibold text-gray-800 dark:text-white mb-2 flex items-center">
-                    <Info size={16} className="mr-2" /> Análisis Automático
-                  </h3>
-                  <ul className="space-y-2 text-sm">
-                    {chartData.data.length === 0 && (
-                      <li className="text-gray-500">Añade datos para generar un análisis automático.</li>
-                    )}
-                    
-                    {chartData.data.length > 0 && (
-                      <>
-                        {stats.mean > chartData.target && (
-                          <li className="flex items-center text-yellow-700 dark:text-yellow-400">
-                            <ArrowUp size={14} className="mr-2" /> La media está por encima del valor objetivo.
-                          </li>
-                        )}
-                        
-                        {stats.mean < chartData.target && (
-                          <li className="flex items-center text-yellow-700 dark:text-yellow-400">
-                            <ArrowDown size={14} className="mr-2" /> La media está por debajo del valor objetivo.
-                          </li>
-                        )}
-                        
-                        {chartData.data.some(d => d.value > chartData.upperLimit) && (
-                          <li className="flex items-center text-red-700 dark:text-red-400">
-                            <Info size={14} className="mr-2" /> Hay puntos fuera del límite de control superior.
-                          </li>
-                        )}
-                        
-                        {chartData.data.some(d => d.value < chartData.lowerLimit) && (
-                          <li className="flex items-center text-red-700 dark:text-red-400">
-                            <Info size={14} className="mr-2" /> Hay puntos fuera del límite de control inferior.
-                          </li>
-                        )}
-                        
-                        {stats.stdDev < (chartData.upperLimit - chartData.lowerLimit) / 6 && (
-                          <li className="flex items-center text-green-700 dark:text-green-400">
-                            <Check size={14} className="mr-2" /> El proceso muestra buena estabilidad.
-                          </li>
-                        )}
-                      </>
-                    )}
-                  </ul>
-                </div>
-              </motion.div>
-            )}
-            
-            {activeTab === 'data' && (
-              <motion.div 
-                key="data"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="h-full"
+                Deshacer
+              </GradientButton>
+              <GradientButton variant="solid" size="sm" onClick={adoptExample}>
+                Usar como punto de partida
+              </GradientButton>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={exampleMode ? 'space-y-6 rounded-xl p-1 ring-1 ring-info/30' : 'space-y-6'}>
+        {isEmpty ? (
+          <EmptyState
+            title="¿Tu proceso está bajo control?"
+            description="Ingresa tus mediciones y deja que los límites de control hablen."
+            action={
+              <GradientButton
+                onClick={() => document.getElementById('cc-new-value')?.focus()}
+                leadingIcon={<Plus size={16} aria-hidden="true" />}
               >
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                    Datos del Gráfico de Control
-                  </h2>
-                  {isEditing && (
-                    <button
-                      onClick={() => document.getElementById('fileInput').click()}
-                      className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded flex items-center text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
-                    >
-                      <Upload size={14} className="mr-1" /> Importar CSV
-                      <input 
-                        id="fileInput" 
-                        type="file"
-                        accept=".csv"
-                        className="hidden"
-                      />
-                    </button>
-                  )}
+                Agregar mediciones
+              </GradientButton>
+            }
+            secondaryAction={
+              t.hasExamples && (
+                <GradientButton variant="outline" onClick={openExample}>
+                  Ver un ejemplo
+                </GradientButton>
+              )
+            }
+          />
+        ) : (
+          <>
+            {/* Información general */}
+            <div className="rounded-xl border border-line bg-surface p-4 sm:p-6">
+              <h2 className="mb-4 text-sm font-semibold text-content">Información general</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="md:col-span-2">
+                  <label htmlFor="cc-metric-name" className="mb-1 block text-xs font-medium text-content-secondary">
+                    Métrica monitoreada
+                  </label>
+                  <input
+                    id="cc-metric-name"
+                    type="text"
+                    value={metricName}
+                    onChange={(e) => updateField('metricName', e.target.value)}
+                    placeholder="Ej. Tiempo de ciclo, % de errores…"
+                    className="input"
+                  />
                 </div>
-                
-                {/* Tabla de datos */}
-                <div className="overflow-auto">
-                  <table className="w-full border-collapse">
-                    <thead className="bg-gray-50 dark:bg-gray-900">
-                      <tr>
-                        <th className="py-2 px-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Fecha</th>
-                        <th className="py-2 px-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Valor ({chartData.unit})</th>
-                        {isEditing && <th className="py-2 px-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Acciones</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chartData.data.map((point) => (
-                        <tr key={point.id} className="border-t border-gray-200 dark:border-gray-700">
-                          <td className="py-3 px-4 text-sm text-gray-800 dark:text-gray-200">
-                            {editingDataPoint && editingDataPoint.id === point.id ? (
-                              <input
-                                type="date"
-                                value={editingDataPoint.date}
-                                onChange={(e) => setEditingDataPoint({...editingDataPoint, date: e.target.value})}
-                                className="border rounded p-1 w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              />
-                            ) : (
-                              new Date(point.date).toLocaleDateString('es-ES')
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-gray-800 dark:text-gray-200">
-                            {editingDataPoint && editingDataPoint.id === point.id ? (
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editingDataPoint.value}
-                                onChange={(e) => setEditingDataPoint({...editingDataPoint, value: e.target.value})}
-                                className="border rounded p-1 w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              />
-                            ) : (
-                              point.value
-                            )}
-                          </td>
-                          {isEditing && (
-                            <td className="py-3 px-4 text-sm">
-                              {editingDataPoint && editingDataPoint.id === point.id ? (
-                                <div className="flex space-x-2">
-                                  <button 
-                                    onClick={saveDataPoint}
-                                    className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                                  >
-                                    <Check size={16} />
-                                  </button>
-                                  <button 
-                                    onClick={() => setEditingDataPoint(null)}
-                                    className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex space-x-2">
-                                  <button 
-                                    onClick={() => startEditDataPoint(point.id)}
-                                    className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                  >
-                                    <Edit size={16} />
-                                  </button>
-                                  <button 
-                                    onClick={() => deleteDataPoint(point.id)}
-                                    className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                      
-                      {isEditing && (
-                        <tr className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                          <td className="py-3 px-4 text-sm">
-                            <input
-                              type="date"
-                              value={newDataPoint.date}
-                              onChange={(e) => setNewDataPoint({...newDataPoint, date: e.target.value})}
-                              className="border rounded p-1 w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              placeholder="YYYY-MM-DD"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-sm">
+                <div>
+                  <label htmlFor="cc-cl" className="mb-1 block text-xs font-medium text-content-secondary">
+                    Línea central (CL)
+                  </label>
+                  <input
+                    id="cc-cl"
+                    type="number"
+                    step="0.1"
+                    value={centerLine}
+                    onChange={(e) => updateLimit('centerLine', e.target.value)}
+                    className="input text-right tabular-nums"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="cc-ucl" className="mb-1 block text-xs font-medium text-content-secondary">
+                      UCL
+                    </label>
+                    <input
+                      id="cc-ucl"
+                      type="number"
+                      step="0.1"
+                      value={upperControlLimit}
+                      onChange={(e) => updateLimit('upperControlLimit', e.target.value)}
+                      className="input text-right tabular-nums"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="cc-lcl" className="mb-1 block text-xs font-medium text-content-secondary">
+                      LCL
+                    </label>
+                    <input
+                      id="cc-lcl"
+                      type="number"
+                      step="0.1"
+                      value={lowerControlLimit}
+                      onChange={(e) => updateLimit('lowerControlLimit', e.target.value)}
+                      className="input text-right tabular-nums"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visualización */}
+            <ControlChartVisualization
+              measurements={measurements}
+              centerLine={centerLine}
+              upperControlLimit={upperControlLimit}
+              lowerControlLimit={lowerControlLimit}
+              metricName={metricName}
+            />
+
+            {/* Tarjetas de estadísticas */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatCard label="Media" value={stats.mean} />
+              <StatCard label="Desviación estándar" value={stats.stdDev} />
+              <StatCard label="Valor máximo" value={stats.max} />
+              <StatCard label="Valor mínimo" value={stats.min} />
+            </div>
+
+            {/* Análisis automático */}
+            <div className="rounded-xl border border-line bg-surface-sunken p-4">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-content">
+                <Info size={16} aria-hidden="true" /> Análisis automático
+              </h3>
+              <ul className="space-y-2 text-sm">
+                {stats.mean > centerLine && (
+                  <li className="flex items-center gap-2 text-warning-on">
+                    <ArrowUp size={14} aria-hidden="true" /> La media está por encima de la línea central.
+                  </li>
+                )}
+                {stats.mean < centerLine && (
+                  <li className="flex items-center gap-2 text-warning-on">
+                    <ArrowDown size={14} aria-hidden="true" /> La media está por debajo de la línea central.
+                  </li>
+                )}
+                {measurements.some((v) => v > upperControlLimit) && (
+                  <li className="flex items-center gap-2 text-danger-on">
+                    <AlertTriangle size={14} aria-hidden="true" /> Hay puntos fuera del límite de control superior.
+                  </li>
+                )}
+                {measurements.some((v) => v < lowerControlLimit) && (
+                  <li className="flex items-center gap-2 text-danger-on">
+                    <AlertTriangle size={14} aria-hidden="true" /> Hay puntos fuera del límite de control inferior.
+                  </li>
+                )}
+                {stats.stdDev < (upperControlLimit - lowerControlLimit) / 6 && (
+                  <li className="flex items-center gap-2 text-success-on">
+                    <Check size={14} aria-hidden="true" /> El proceso muestra buena estabilidad.
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            {/* Tabla de mediciones (vista equivalente accesible del gráfico) */}
+            <motion.div
+              initial={shouldReduceMotion ? false : 'hidden'}
+              animate="visible"
+              variants={fadeInUp}
+              className="overflow-x-auto rounded-xl border border-line bg-surface"
+            >
+              <table className="w-full min-w-[420px] text-sm">
+                <caption className="sr-only">Mediciones registradas con su valor y estado frente a los límites de control</caption>
+                <thead>
+                  <tr className="border-b border-line bg-surface-sunken text-left text-xs font-medium uppercase tracking-wide text-content-muted">
+                    <th scope="col" className="px-4 py-2.5">Muestra</th>
+                    <th scope="col" className="px-4 py-2.5 text-right">Valor</th>
+                    <th scope="col" className="px-4 py-2.5">Estado</th>
+                    <th scope="col" className="px-2 py-2.5 text-right">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {measurements.map((value, index) => {
+                    const outOfLimits = value > upperControlLimit || value < lowerControlLimit;
+                    const isEditingRow = editingIndex === index;
+                    return (
+                      <tr key={index} className="border-b border-line-subtle last:border-0">
+                        <td className="px-4 py-2 text-content-secondary">Muestra {index + 1}</td>
+                        <td className="px-4 py-2 text-right">
+                          {isEditingRow ? (
                             <input
                               type="number"
                               step="0.1"
-                              value={newDataPoint.value}
-                              onChange={(e) => setNewDataPoint({...newDataPoint, value: e.target.value})}
-                              className="border rounded p-1 w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              placeholder="Valor"
+                              autoFocus
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEditMeasurement()}
+                              aria-label={`Valor de la muestra ${index + 1}`}
+                              className="input w-24 text-right tabular-nums"
                             />
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            <button 
-                              onClick={addDataPoint}
-                              className="p-1 bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-800"
+                          ) : (
+                            <span className="tabular-nums text-content">{formatNumber(value, { maximumFractionDigits: 2 })}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          {outOfLimits ? (
+                            <span className="badge bg-danger-soft text-danger-on">Fuera de control</span>
+                          ) : (
+                            <span className="badge bg-success-soft text-success-on">En control</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <div className="flex justify-end gap-1">
+                            {isEditingRow ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={saveEditMeasurement}
+                                  aria-label={`Guardar valor de la muestra ${index + 1}`}
+                                  className="rounded-lg p-1.5 text-success-on transition-colors duration-fast hover:bg-success-soft"
+                                >
+                                  <Check size={15} aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => startEditMeasurement(index)}
+                                aria-label={`Editar valor de la muestra ${index + 1}`}
+                                className="rounded-lg px-2 py-1 text-xs font-medium text-content-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-content"
+                              >
+                                Editar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeMeasurement(index)}
+                              aria-label={`Eliminar muestra ${index + 1}`}
+                              className="rounded-lg p-1.5 text-content-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger-on"
                             >
-                              <Plus size={16} />
+                              <Trash2 size={15} aria-hidden="true" />
                             </button>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
-            )}
-            
-            {activeTab === 'settings' && (
-              <motion.div 
-                key="settings"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="h-full"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                    Configuración del Gráfico
-                  </h2>
-                </div>
-                
-                {/* Configuración general */}
-                <div className="mb-6">
-                  <h3 className="text-md font-semibold text-gray-800 dark:text-white mb-3">Información General</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Título del Gráfico
-                      </label>
-                      <input
-                        type="text"
-                        value={chartData.title}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('title', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Métrica
-                      </label>
-                      <input
-                        type="text"
-                        value={chartData.metric}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('metric', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Unidad de Medida
-                      </label>
-                      <input
-                        type="text"
-                        value={chartData.unit}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('unit', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Límites de control */}
-                <div>
-                  <h3 className="text-md font-semibold text-gray-800 dark:text-white mb-3">Límites de Control</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Valor Objetivo
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={chartData.target}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('target', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Límite Superior (UCL)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={chartData.upperLimit}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('upperLimit', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Límite Inferior (LCL)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={chartData.lowerLimit}
-                        disabled={!isEditing}
-                        onChange={(e) => updateChartSettings('lowerLimit', e.target.value)}
-                        className="border rounded-md p-2 w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t border-line-subtle bg-surface-sunken">
+                    <td className="px-4 py-2 text-xs font-medium text-content-secondary">Muestra {measurements.length + 1}</td>
+                    <td className="px-4 py-2 text-right" colSpan={3}>
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          id="cc-new-value"
+                          type="number"
+                          step="0.1"
+                          value={newValue}
+                          onChange={(e) => setNewValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addMeasurement()}
+                          placeholder="Nuevo valor"
+                          aria-label="Valor de la nueva muestra"
+                          className="input w-28 text-right tabular-nums"
+                        />
+                        <GradientButton
+                          variant="outline"
+                          size="sm"
+                          onClick={addMeasurement}
+                          leadingIcon={<Plus size={14} aria-hidden="true" />}
+                        >
+                          Agregar
+                        </GradientButton>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </motion.div>
+          </>
+        )}
+      </div>
+
+      {/* Confirmación: cargar ejemplo con borrador sucio */}
+      <Modal
+        open={confirmKind === 'example'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton variant="solid" onClick={applyExample}>
+              Ver el ejemplo
+            </GradientButton>
+          </>
+        }
+      />
+
+      {/* Confirmación: descartar cambios sin guardar */}
+      <Modal
+        open={confirmKind === 'discard'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton variant="danger" onClick={confirmDiscard}>
+              Descartar
+            </GradientButton>
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+/** Máquina de estados de guardado (idéntica a la definida para las 14 herramientas). */
+function SaveStatus({ tool }) {
+  let icon = <span className="h-2 w-2 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let tone = 'text-content-muted';
+
+  if (tool.error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    tone = 'text-danger-on';
+  } else if (tool.isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    tone = 'text-content-secondary';
+  } else if (tool.justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    tone = 'text-success-on';
+  } else if (tool.isDirty) {
+    icon = <span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    tone = 'text-warning-on';
+  } else if (tool.lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(tool.lastSavedAt)}`;
+    tone = 'text-success-on';
+  }
+
+  return (
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm font-medium ${tone}`}>
+      {icon}
+      <span className="tabular-nums">{text}</span>
+      {tool.error && (
+        <button type="button" onClick={() => tool.save()} className="ml-1 underline underline-offset-2 hover:no-underline">
+          Reintentar
+        </button>
+      )}
+    </p>
+  );
+}
+
+/** Tarjeta de estadística simple, cifra en tabular-nums. */
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <h3 className="mb-1 text-xs font-medium text-content-muted">{label}</h3>
+      <p className="text-xl font-semibold tabular-nums text-content">
+        {formatNumber(value, { maximumFractionDigits: 2 })}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Visualización del gráfico de control: línea central, límites UCL/LCL y
+ * puntos de medición, con los puntos fuera de límite resaltados en rojo.
+ * El dominio vertical se extiende para siempre incluir CL/UCL/LCL y los
+ * valores medidos, aunque se salgan de los límites.
+ */
+function ControlChartVisualization({ measurements, centerLine, upperControlLimit, lowerControlLimit, metricName }) {
+  const width = 1000;
+  const height = 360;
+  const padding = 30;
+
+  const domain = useMemo(() => {
+    const values = [centerLine, upperControlLimit, lowerControlLimit, ...measurements].map(Number);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (min === max) {
+      min -= 1;
+      max += 1;
+    }
+    const span = max - min;
+    return { min: min - span * 0.1, max: max + span * 0.1 };
+  }, [measurements, centerLine, upperControlLimit, lowerControlLimit]);
+
+  const toY = useCallback(
+    (value) => {
+      const range = domain.max - domain.min || 1;
+      const normalized = (Number(value) - domain.min) / range;
+      return height - padding - normalized * (height - padding * 2);
+    },
+    [domain]
+  );
+
+  const points = useMemo(
+    () =>
+      measurements.map((value, index) => ({
+        x: measurements.length > 1 ? (index / (measurements.length - 1)) * width : width / 2,
+        y: toY(value),
+        value,
+        outOfLimits: value > upperControlLimit || value < lowerControlLimit,
+      })),
+    [measurements, toY, upperControlLimit, lowerControlLimit]
+  );
+
+  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-content">
+          {metricName || 'Gráfico de control'}
+        </h2>
+        <div className="flex flex-wrap items-center gap-4 text-xs text-content-secondary">
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4" style={{ background: 'rgb(var(--jc-brand))' }} aria-hidden="true" /> Línea central
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4 border-t-2 border-dashed" style={{ borderColor: 'rgb(var(--jc-danger))' }} aria-hidden="true" /> UCL / LCL
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: 'rgb(var(--jc-danger))' }} aria-hidden="true" /> Fuera de control
+          </span>
         </div>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          className="h-64 w-full min-w-[480px] md:h-80"
+          role="img"
+          aria-label={`Gráfico de control de ${metricName || 'la métrica'}: línea central ${centerLine}, límite superior ${upperControlLimit}, límite inferior ${lowerControlLimit}`}
+        >
+          {/* Límites y línea central */}
+          <line
+            x1="0"
+            x2={width}
+            y1={toY(upperControlLimit)}
+            y2={toY(upperControlLimit)}
+            style={{ stroke: 'rgb(var(--jc-danger))' }}
+            strokeWidth="1.5"
+            strokeDasharray="6 5"
+          />
+          <line
+            x1="0"
+            x2={width}
+            y1={toY(centerLine)}
+            y2={toY(centerLine)}
+            style={{ stroke: 'rgb(var(--jc-brand))' }}
+            strokeWidth="1.5"
+          />
+          <line
+            x1="0"
+            x2={width}
+            y1={toY(lowerControlLimit)}
+            y2={toY(lowerControlLimit)}
+            style={{ stroke: 'rgb(var(--jc-danger))' }}
+            strokeWidth="1.5"
+            strokeDasharray="6 5"
+          />
+
+          {/* Línea que conecta los puntos */}
+          {points.length > 1 && (
+            <polyline
+              points={polylinePoints}
+              fill="none"
+              style={{ stroke: 'rgb(var(--jc-content-muted))' }}
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
+          {/* Puntos individuales */}
+          {points.map((p, index) => (
+            <circle
+              key={index}
+              cx={p.x}
+              cy={p.y}
+              r="6"
+              style={{ fill: p.outOfLimits ? 'rgb(var(--jc-danger))' : 'rgb(var(--jc-brand))' }}
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs tabular-nums text-content-muted">
+        <span>UCL: {formatNumber(upperControlLimit, { maximumFractionDigits: 2 })}</span>
+        <span>CL: {formatNumber(centerLine, { maximumFractionDigits: 2 })}</span>
+        <span>LCL: {formatNumber(lowerControlLimit, { maximumFractionDigits: 2 })}</span>
       </div>
     </div>
   );
-};
-
-export default ControlChart;
-   
+}

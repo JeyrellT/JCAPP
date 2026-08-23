@@ -1,508 +1,369 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Activity, Users, Package, FileInput, BarChart3, ArrowRight, RefreshCw, Truck, Save, Edit, Plus, Trash2 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
+import { useState, useEffect, useRef } from 'react';
+import { Truck, FileInput, Activity, ArrowRight, Users, Plus, X, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatRelative } from '../lib/format';
+import { fadeInUp } from '../lib/motion';
 
 /**
- * Componente de visualización SIPOC (Supplier, Input, Process, Output, Customer)
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
+ * SIPOC (Supplier-Input-Process-Output-Customer).
+ *
+ * ToolPage ya monta título, breadcrumbs, PhaseBadge/StatusBadge, navegación
+ * Anterior/Siguiente, pantalla completa y "Descargar JSON" — este componente
+ * solo aporta su propio contenido, sin tarjeta exterior ni encabezado propio.
  */
-const SipocViewer = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  
-  // Estados locales
-  const [activeTab, setActiveTab] = useState(0);
-  const [expandedRows, setExpandedRows] = useState({});
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [sipocData, setSipocData] = useState([]);
-  
-  // Cargar datos del proyecto
+const TOOL_ID = 'sipoc';
+
+const DEFAULT_DATA = {
+  processName: '',
+  suppliers: [],
+  inputs: [],
+  process: [],
+  outputs: [],
+  customers: [],
+};
+
+const COLUMNS = [
+  { key: 'suppliers', label: 'Proveedores', icon: Truck },
+  { key: 'inputs', label: 'Entradas', icon: FileInput },
+  { key: 'process', label: 'Proceso', icon: Activity },
+  { key: 'outputs', label: 'Salidas', icon: ArrowRight },
+  { key: 'customers', label: 'Clientes', icon: Users },
+];
+
+/**
+ * Rescate de datos viejos: hasta este ciclo SIPOC escribía en `project.sipocs`
+ * (un arreglo de diagramas con pestañas, cada uno con filas
+ * `{ suppliers, inputs, process, outputs, customers }`). La forma canónica de
+ * `project.tools.sipoc.data` es un único proceso con listas independientes por
+ * categoría, así que se toma el primer diagrama con contenido y se aplanan sus
+ * filas por columna, descartando celdas vacías.
+ */
+const legacyFromRoot = (project) => {
+  const list = Array.isArray(project?.sipocs) ? project.sipocs : null;
+  if (!list || list.length === 0) return null;
+
+  const first = list.find((s) => Array.isArray(s?.data) && s.data.length > 0) || list[0];
+  const rows = Array.isArray(first?.data) ? first.data : [];
+  const collect = (key) => rows.map((row) => (row?.[key] || '').toString().trim()).filter(Boolean);
+
+  const rescued = {
+    processName: first?.title || '',
+    suppliers: collect('suppliers'),
+    inputs: collect('inputs'),
+    process: collect('process'),
+    outputs: collect('outputs'),
+    customers: collect('customers'),
+  };
+
+  const hasContent = rescued.processName || COLUMNS.some(({ key }) => rescued[key].length > 0);
+  return hasContent ? rescued : null;
+};
+
+/** Estado de guardado en texto, calculado — nunca simulado con setTimeout. */
+function SaveStatus({ tool }) {
+  // Fuerza un re-render cada 60s para que "hace 3 minutos" no se congele.
+  const [, tick] = useState(0);
   useEffect(() => {
-    if (project) {
-      // Si el proyecto tiene datos SIPOC, cargarlos
-      if (project.sipocs && Array.isArray(project.sipocs)) {
-        setSipocData(project.sipocs);
-      } else {
-        // Si no, crear datos SIPOC por defecto
-        setSipocData([
-          {
-            id: 1,
-            title: "Apertura y Desbloqueo de Clientes",
-            icon: "Users",
-            color: "bg-blue-600",
-            hoverColor: "hover:bg-blue-700",
-            textColor: "text-blue-600",
-            data: [
-              {
-                suppliers: "Agente, Cliente, Personal de Sala",
-                inputs: "Datos Cliente (vía Formulario, Foto WhatsApp, Verbal). Solicitud implícita de crédito/desbloqueo.",
-                process: "1. Recibir/Solicitar datos del cliente (Canal informal/formal).",
-                outputs: "Cliente creado/actualizado en FACTUAPP (si es vía Agente).",
-                customers: "Agentes, Personal de Sala (necesitan cliente operativo)"
-              },
-              {
-                suppliers: "FACTUAPP, FinanzasPRO (Sistemas actuales)",
-                inputs: "Estado actual de CxC del cliente (obtenido reactivamente).",
-                process: "2. (Si aplica) Digitación manual de datos.",
-                outputs: "Cliente creado/actualizado en FinanzasPRO.",
-                customers: "Dpto. Finanzas, Contabilidad (necesitan datos correctos)"
-              }
-            ]
-          }
-        ]);
-      }
-    }
-  }, [project]);
+    if (!tool.lastSavedAt) return undefined;
+    const id = setInterval(() => tick((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, [tool.lastSavedAt]);
 
-  // Función para guardar cambios en el proyecto
-  const saveChanges = () => {
-    if (!project) return;
-    
-    setIsSaving(true);
-    
-    // Actualizar el proyecto con los datos SIPOC
-    updateProject(projectId, {
-      sipocs: sipocData,
-      // Actualizar la propiedad tools para marcar el SIPOC como completado
-      tools: {
-        ...project.tools,
-        'sipoc': {
-          ...project.tools['sipoc'],
-          status: 'completed',
-          updatedAt: new Date().toISOString()
-        }
-      }
-    });
-    
-    // Simular guardado
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsEditing(false);
-      // Aquí se podría mostrar una notificación de éxito
-    }, 1000);
-  };
+  let icon = <span className="h-1.5 w-1.5 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let className = 'text-content-muted';
 
-  // Función para alternar filas expandidas
-  const toggleRow = (rowIndex) => {
-    setExpandedRows(prev => ({
-      ...prev,
-      [rowIndex]: !prev[rowIndex]
-    }));
-  };
-  
-  // Función para añadir un nuevo SIPOC
-  const addNewSipoc = () => {
-    const newId = sipocData.length > 0 ? Math.max(...sipocData.map(s => s.id)) + 1 : 1;
-    
-    setSipocData([
-      ...sipocData,
-      {
-        id: newId,
-        title: `Nuevo Proceso ${newId}`,
-        icon: "Package",
-        color: "bg-purple-600",
-        hoverColor: "hover:bg-purple-700",
-        textColor: "text-purple-600",
-        data: [
-          {
-            suppliers: "Proveedor",
-            inputs: "Entradas",
-            process: "Proceso",
-            outputs: "Salidas",
-            customers: "Clientes"
-          }
-        ]
-      }
-    ]);
-  };
-  
-  // Función para eliminar un SIPOC
-  const deleteSipoc = (sipocId) => {
-    setSipocData(sipocData.filter(sipoc => sipoc.id !== sipocId));
-  };
-  
-  // Función para actualizar un SIPOC
-  const updateSipoc = (sipocId, updatedData) => {
-    setSipocData(sipocData.map(sipoc => 
-      sipoc.id === sipocId ? { ...sipoc, ...updatedData } : sipoc
-    ));
-  };
-  
-  // Función para añadir una fila a un SIPOC
-  const addRowToSipoc = (sipocId) => {
-    setSipocData(sipocData.map(sipoc => {
-      if (sipoc.id === sipocId) {
-        return {
-          ...sipoc,
-          data: [
-            ...sipoc.data,
-            {
-              suppliers: "",
-              inputs: "",
-              process: `${sipoc.data.length + 1}. `,
-              outputs: "",
-              customers: ""
-            }
-          ]
-        };
-      }
-      return sipoc;
-    }));
-  };
-  
-  // Función para actualizar una fila específica de un SIPOC
-  const updateSipocRow = (sipocId, rowIndex, updatedRow) => {
-    setSipocData(sipocData.map(sipoc => {
-      if (sipoc.id === sipocId) {
-        const newData = [...sipoc.data];
-        newData[rowIndex] = updatedRow;
-        return { ...sipoc, data: newData };
-      }
-      return sipoc;
-    }));
-  };
-  
-  // Función para eliminar una fila específica de un SIPOC
-  const deleteSipocRow = (sipocId, rowIndex) => {
-    setSipocData(sipocData.map(sipoc => {
-      if (sipoc.id === sipocId) {
-        const newData = sipoc.data.filter((_, i) => i !== rowIndex);
-        return { ...sipoc, data: newData };
-      }
-      return sipoc;
-    }));
-  };
-  
-  // Función para obtener el icono del SIPOC
-  const getSipocIcon = (iconName, size = 20) => {
-    const icons = {
-      'Users': <Users className="w-5 h-5" />,
-      'Package': <Package className="w-5 h-5" />,
-      'Activity': <Activity className="w-5 h-5" />,
-      'FileInput': <FileInput className="w-5 h-5" />,
-      'BarChart3': <BarChart3 className="w-5 h-5" />,
-      'RefreshCw': <RefreshCw className="w-5 h-5" />
-    };
-    
-    return icons[iconName] || <Package className="w-5 h-5" />;
-  };
-  
-  // Colores por columna
-  const columnStyles = {
-    suppliers: {
-      icon: <Truck className="w-5 h-5" />,
-      color: "text-blue-500",
-      bgColor: "bg-blue-100",
-      darkBgColor: "bg-blue-700"
-    },
-    inputs: {
-      icon: <FileInput className="w-5 h-5" />,
-      color: "text-purple-500",
-      bgColor: "bg-purple-100",
-      darkBgColor: "bg-purple-700"
-    },
-    process: {
-      icon: <Activity className="w-5 h-5" />,
-      color: "text-red-500",
-      bgColor: "bg-red-100",
-      darkBgColor: "bg-red-700"
-    },
-    outputs: {
-      icon: <ArrowRight className="w-5 h-5" />,
-      color: "text-green-500",
-      bgColor: "bg-green-100",
-      darkBgColor: "bg-green-700"
-    },
-    customers: {
-      icon: <Users className="w-5 h-5" />,
-      color: "text-amber-500",
-      bgColor: "bg-amber-100",
-      darkBgColor: "bg-amber-700"
-    }
-  };
-  
-  // Variantes para animaciones
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3
-      }
-    }
-  };
-  
-  // Si no hay proyecto, no mostrar nada
-  if (!project) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Cargando proyecto...</p>
-      </div>
-    );
+  if (tool.error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    className = 'text-danger-on';
+  } else if (tool.isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    className = 'text-content-secondary';
+  } else if (tool.justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    className = 'text-success-on';
+  } else if (tool.isDirty) {
+    icon = <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    className = 'text-warning-on';
+  } else if (tool.lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(tool.lastSavedAt)}`;
+    className = 'text-success-on';
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="flex flex-col min-h-screen bg-gray-900"
-    >
-      <motion.div
-        variants={itemVariants}
-        className="bg-gray-800 shadow-lg rounded-lg p-6 m-4 border-b-4 border-indigo-600 transition-all duration-300 hover:shadow-xl"
-      >
-        <div className="flex justify-between items-center mb-2">
-          <h1 className="text-3xl font-bold text-center text-white">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-blue-300">
-              SIPOCs - {project.name}
-            </span>
-          </h1>
-          
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-            >
-              <Edit size={16} className="mr-2" /> Editar
-            </button>
-          ) : (
-            <div className="flex space-x-2">
-              <button
-                onClick={saveChanges}
-                disabled={isSaving}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? (
-                  <>
-                    <span className="animate-spin mr-2">
-                      <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    </span>
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} className="mr-2" /> Guardar
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setIsEditing(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm ${className}`}>
+      {icon}
+      <span className="tabular-nums">{text}</span>
+      {tool.error && (
+        <button type="button" onClick={() => tool.save()} className="ml-1 font-medium underline underline-offset-2">
+          Reintentar
+        </button>
+      )}
+    </p>
+  );
+}
+
+const SipocViewer = ({ projectId }) => {
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, { legacy: legacyFromRoot });
+  const shouldReduceMotion = useReducedMotion();
+
+  const [exampleMode, setExampleMode] = useState(false);
+  const [confirmLoadExample, setConfirmLoadExample] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const snapshotRef = useRef(null);
+
+  if (!t.ready) return null;
+
+  const requestExample = () => {
+    if (t.isDirty) {
+      setConfirmLoadExample(true);
+    } else {
+      applyExample();
+    }
+  };
+
+  const applyExample = () => {
+    snapshotRef.current = t.data;
+    t.loadExample(0);
+    setExampleMode(true);
+    setConfirmLoadExample(false);
+  };
+
+  const acceptExample = () => {
+    t.save();
+    setExampleMode(false);
+    snapshotRef.current = null;
+  };
+
+  const undoExample = () => {
+    if (snapshotRef.current) t.setData(snapshotRef.current);
+    setExampleMode(false);
+    snapshotRef.current = null;
+  };
+
+  const requestCancel = () => {
+    if (t.isDirty) setConfirmDiscard(true);
+  };
+
+  const confirmDiscardChanges = () => {
+    t.discard();
+    setConfirmDiscard(false);
+    setExampleMode(false);
+    snapshotRef.current = null;
+  };
+
+  const addItem = (key) => {
+    t.setData((prev) => ({ ...prev, [key]: [...prev[key], ''] }));
+  };
+  const updateItem = (key, index, value) => {
+    t.setData((prev) => {
+      const next = [...prev[key]];
+      next[index] = value;
+      return { ...prev, [key]: next };
+    });
+  };
+  const removeItem = (key, index) => {
+    t.setData((prev) => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }));
+  };
+
+  const isEmpty = !t.data.processName && COLUMNS.every(({ key }) => (t.data[key] || []).length === 0);
+  const maxRows = Math.max(0, ...COLUMNS.map(({ key }) => (t.data[key] || []).length));
+
+  return (
+    <div className="space-y-6 p-4 sm:p-6">
+      {/* Barra de guardado y acciones */}
+      <div className="sticky top-0 z-10 -mx-4 mb-2 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus tool={t} />
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && (
+            <GradientButton variant="outline" size="sm" onClick={requestExample}>
+              Ver un ejemplo
+            </GradientButton>
           )}
+          {t.isDirty && (
+            <GradientButton variant="ghost" size="sm" onClick={requestCancel}>
+              Cancelar
+            </GradientButton>
+          )}
+          <GradientButton variant="success" size="sm" disabled={!t.isDirty || t.isSaving} onClick={() => t.save()}>
+            Guardar
+          </GradientButton>
         </div>
-        <p className="text-sm text-gray-400 text-center max-w-2xl mx-auto">
-          Diagramas Supplier-Input-Process-Output-Customer para visualizar los procesos clave de negocio
-        </p>
-      </motion.div>
-      
-      {/* Tabs Navigation */}
-      <motion.div variants={itemVariants} className="flex flex-wrap justify-center mb-6 px-4">
-        {sipocData.map((sipoc, index) => (
-          <button
-            key={sipoc.id}
-            onClick={() => setActiveTab(index)}
-            className={`flex items-center px-5 py-3 m-1 rounded-lg transition-all duration-300 transform ${
-              activeTab === index 
-                ? `${sipoc.color} text-white shadow-md scale-105` 
-                : 'bg-gray-800 text-gray-300 hover:shadow-md hover:scale-105'
-            } ${sipoc.hoverColor}`}
-          >
-            <div className={`mr-2 ${activeTab !== index ? sipoc.textColor : ''}`}>
-              {getSipocIcon(sipoc.icon)}
-            </div>
-            <span className="font-medium">{sipoc.title}</span>
-            
-            {isEditing && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteSipoc(sipoc.id);
-                }}
-                className="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors rounded-full hover:bg-gray-700"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-          </button>
-        ))}
-        
-        {isEditing && (
-          <button
-            onClick={addNewSipoc}
-            className="flex items-center px-5 py-3 m-1 rounded-lg transition-all duration-300 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white"
-          >
-            <Plus size={20} className="mr-2" />
-            <span>Nuevo SIPOC</span>
-          </button>
-        )}
-      </motion.div>
-      
-      {/* Current SIPOC Table */}
-      <motion.div
-        variants={itemVariants}
-        className="bg-gray-800 shadow-lg rounded-lg overflow-hidden mx-4 mb-6 border border-gray-700 transition-all duration-500 animate-fadeIn"
-      >
-        {sipocData.length > 0 && activeTab < sipocData.length && (
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className={`text-3xl font-bold ${sipocData[activeTab].textColor} flex items-center`}>
-                {getSipocIcon(sipocData[activeTab].icon)}
-                <span className="ml-2">{sipocData[activeTab].title}</span>
-              </h2>
-              
-              {isEditing && (
-                <button
-                  onClick={() => addRowToSipoc(sipocData[activeTab].id)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center text-sm"
-                >
-                  <Plus size={14} className="mr-1" /> Añadir Fila
-                </button>
-              )}
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead>
-                  <tr>
-                    {Object.entries(columnStyles).map(([key, style]) => (
-                      <th key={key} scope="col" className={`p-4 text-left text-lg font-bold uppercase tracking-wider ${style.darkBgColor}`}>
-                        <div className="flex items-center justify-center">
-                          <div className="mr-2 text-white">
-                            {style.icon}
-                          </div>
-                          <span className="text-white">{key.charAt(0).toUpperCase() + key.slice(1)}</span>
-                        </div>
-                      </th>
-                    ))}
-                    {isEditing && (
-                      <th scope="col" className="p-4 text-left text-lg font-bold uppercase tracking-wider bg-gray-700">
-                        <span className="text-white">Acciones</span>
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {sipocData[activeTab].data.map((row, rowIndex) => (
-                    <tr 
-                      key={rowIndex} 
-                      className={`
-                        ${rowIndex % 2 === 0 ? 'bg-gray-900' : 'bg-gray-800'} 
-                        hover:bg-gray-700 transition-colors duration-150 cursor-pointer
-                        ${expandedRows[rowIndex] ? 'border-l-4 border-indigo-500' : ''}
-                      `}
-                      onClick={() => !isEditing && toggleRow(rowIndex)}
+      </div>
+
+      {exampleMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info bg-info-soft px-4 py-3 ring-1 ring-inset ring-info/30">
+          <div className="flex items-center gap-2 text-sm text-info-on">
+            <span className="badge bg-info text-white">Ejemplo</span>
+            <span>Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <GradientButton variant="outline" size="sm" onClick={undoExample}>
+              Deshacer
+            </GradientButton>
+            <GradientButton variant="success" size="sm" onClick={acceptExample}>
+              Usar como punto de partida
+            </GradientButton>
+          </div>
+        </div>
+      )}
+
+      {isEmpty ? (
+        <EmptyState
+          title="Antes de mejorar un proceso hay que verlo entero"
+          description="Nombra el proceso y mapea Proveedores, Entradas, Proceso, Salidas y Clientes."
+          action={
+            <GradientButton onClick={() => t.patch({ processName: t.data.processName || 'Nuevo proceso' })}>
+              Nombrar el proceso
+            </GradientButton>
+          }
+          secondaryAction={
+            t.hasExamples ? (
+              <GradientButton variant="outline" onClick={requestExample}>
+                Ver un ejemplo
+              </GradientButton>
+            ) : undefined
+          }
+        />
+      ) : (
+        <motion.div
+          initial={shouldReduceMotion ? false : 'hidden'}
+          animate="visible"
+          variants={fadeInUp}
+          className="space-y-6"
+        >
+          <div>
+            <label htmlFor="sipoc-process-name" className="mb-1 block text-sm font-medium text-content-secondary">
+              Nombre del proceso
+            </label>
+            <input
+              id="sipoc-process-name"
+              value={t.data.processName ?? ''}
+              onChange={(e) => t.patch({ processName: e.target.value })}
+              placeholder="Ej. Gestión de Cobranza"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-content"
+            />
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="min-w-full divide-y divide-line">
+              <thead>
+                <tr>
+                  {COLUMNS.map(({ key, label, icon: Icon }) => (
+                    <th
+                      key={key}
+                      scope="col"
+                      className="bg-surface-sunken p-3 text-left text-xs font-semibold uppercase tracking-wide text-content-secondary"
                     >
-                      {Object.entries(columnStyles).map(([key, style]) => (
-                        <td 
-                          key={key} 
-                          className={`p-4 text-sm text-gray-300 align-top ${expandedRows[rowIndex] ? 'font-medium' : ''}`}
-                        >
-                          {isEditing ? (
-                            <textarea
-                              value={row[key] || ''}
-                              onChange={(e) => {
-                                const updatedRow = { ...row };
-                                updatedRow[key] = e.target.value;
-                                updateSipocRow(sipocData[activeTab].id, rowIndex, updatedRow);
-                              }}
-                              className="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white"
-                              rows="3"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          ) : (
-                            <div className={`transition-all duration-300 rounded p-2 ${expandedRows[rowIndex] ? style.bgColor + ' ' + style.color : ''}`}>
-                              {row[key] || '-'}
-                            </div>
-                          )}
-                        </td>
-                      ))}
-                      
-                      {isEditing && (
-                        <td className="p-4 text-sm text-gray-300 align-top">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteSipocRow(sipocData[activeTab].id, rowIndex);
-                            }}
-                            className="p-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                            title="Eliminar fila"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
+                      <div className="flex items-center gap-2">
+                        <Icon size={16} className="text-content-muted" aria-hidden="true" />
+                        <span>{label}</span>
+                      </div>
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line-subtle">
+                {maxRows === 0 ? (
+                  <tr>
+                    <td colSpan={COLUMNS.length} className="p-4 text-center text-sm text-content-muted">
+                      Agrega el primer elemento en cualquier columna para empezar la fila.
+                    </td>
+                  </tr>
+                ) : (
+                  Array.from({ length: maxRows }).map((_, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {COLUMNS.map(({ key, label }) => {
+                        const value = (t.data[key] || [])[rowIndex];
+                        if (value === undefined) return <td key={key} className="p-3 align-top" />;
+                        return (
+                          <td key={key} className="p-3 align-top">
+                            <div className="flex items-start gap-1">
+                              <textarea
+                                value={value}
+                                onChange={(e) => updateItem(key, rowIndex, e.target.value)}
+                                rows={2}
+                                className="w-full resize-none rounded-md border border-line bg-surface px-2 py-1.5 text-sm text-content"
+                                aria-label={`${label} ${rowIndex + 1}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeItem(key, rowIndex)}
+                                className="mt-1 rounded p-1 text-content-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger-on"
+                                aria-label={`Eliminar ${label.toLowerCase()} ${rowIndex + 1}`}
+                              >
+                                <X size={14} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  {COLUMNS.map(({ key, label }) => (
+                    <td key={key} className="border-t border-line p-3">
+                      <button
+                        type="button"
+                        onClick={() => addItem(key)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+                      >
+                        <Plus size={14} aria-hidden="true" /> Agregar {label.toLowerCase()}
+                      </button>
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
           </div>
-        )}
-        
-        {sipocData.length === 0 && (
-          <div className="p-6 text-center">
-            <p className="text-gray-400 mb-4">No hay SIPOCs disponibles</p>
-            {isEditing && (
-              <button
-                onClick={addNewSipoc}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center mx-auto"
-              >
-                <Plus size={16} className="mr-2" /> Crear Primer SIPOC
-              </button>
-            )}
-          </div>
-        )}
-      </motion.div>
-      
-      {/* Interactive Footer with Instructions */}
-      <motion.div
-        variants={itemVariants}
-        className="mt-auto bg-gray-800 p-4 rounded-lg mx-4 mb-4 shadow-inner text-center border-t border-gray-700"
-      >
-        <p className="text-sm text-indigo-300">
-          <span className="font-medium">Interactividad:</span> {isEditing 
-            ? "Edita el contenido de las celdas y añade nuevas filas o SIPOCs." 
-            : "Haz clic en cualquier fila para destacarla. Cambia entre pestañas para ver los diferentes procesos."}
-        </p>
-        <p className="text-xs text-gray-400 mt-2">
-          Aplicación de visualización de SIPOCs - Proyecto de mejora de procesos
-        </p>
-      </motion.div>
-      
-      {/* Add animation CSS */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+        </motion.div>
+      )}
+
+      <Modal
+        open={confirmLoadExample}
+        onClose={() => setConfirmLoadExample(false)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmLoadExample(false)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton variant="success" onClick={applyExample}>
+              Ver el ejemplo
+            </GradientButton>
+          </>
         }
-        .animate-fadeIn {
-          animation: fadeIn 0.5s ease-out;
+      />
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmDiscard(false)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton variant="danger" onClick={confirmDiscardChanges}>
+              Descartar
+            </GradientButton>
+          </>
         }
-      `}</style>
-    </motion.div>
+      />
+    </div>
   );
 };
 

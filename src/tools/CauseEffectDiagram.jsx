@@ -1,507 +1,510 @@
-import { useState, useEffect, useRef } from 'react';
-import { 
-  GitBranch, 
-  Save, 
-  Edit, 
-  Plus, 
-  Trash2, 
-  ArrowRight, 
-  Info,
-  Maximize2,
-  Minimize2,
+import { useState, useRef } from 'react';
+import {
+  Plus,
+  Trash2,
+  Pencil,
   Move,
   Check,
   X,
   Lightbulb,
-  Clock,
-  Eye,
-  EyeOff,
-  AlertTriangle,
+  GitBranch,
+  Info,
   Flag,
-  MoreHorizontal
+  Eye,
+  Undo2,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
-import ToolHeader from '../components/common/ToolHeader';
-import ToolsNavigation from '../components/navigation/ToolsNavigation';
-import Notification from '../components/common/Notification';
+import { motion, AnimatePresence, Reorder, useReducedMotion } from 'framer-motion';
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatRelative } from '../lib/format';
+import { transition, fadeInUp } from '../lib/motion';
 
-/**
- * Componente para visualizar un Diagrama Causa-Efecto (Ishikawa/Espina de Pescado)
- * 
- * @param {Object} props - Propiedades del componente
- * @param {string} props.projectId - ID del proyecto
- */
-const CauseEffectDiagram = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
-  const diagramRef = useRef(null);
-  
-  // Estados locales
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [editingItem, setEditingItem] = useState(null);
+const TOOL_ID = 'cause-effect-diagram';
+
+// Forma completa del estado vacío, alineada a la semilla de src/data/projects.js:
+// categories es un array de { name, causes: [string, ...] } — las causas son
+// texto plano, no objetos con id (así se guarda hoy en projects.js y en el
+// ejemplo de toolsData.js, así que el adaptador por defecto del hook encaja
+// tal cual, sin necesitar `adaptExample`).
+const DEFAULT_DATA = {
+  problem: '',
+  categories: [
+    { name: 'Maquinaria', causes: [] },
+    { name: 'Materiales', causes: [] },
+    { name: 'Métodos', causes: [] },
+    { name: 'Mano de Obra', causes: [] },
+    { name: 'Medio Ambiente', causes: [] },
+    { name: 'Medición', causes: [] },
+  ],
+};
+
+// Rescate legacy: antes de este ciclo, el guardado escribía en la raíz del
+// proyecto (`project.causeEffectDiagram`) en vez de la ruta canónica
+// `project.tools['cause-effect-diagram'].data`. Sin esto, un proyecto con
+// trabajo legacy abriría la herramienta en blanco.
+const legacy = (project) => project?.causeEffectDiagram || null;
+
+export default function CauseEffectDiagram({ projectId }) {
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, { legacy });
+  const shouldReduceMotion = useReducedMotion();
+
+  const [editingItem, setEditingItem] = useState(null); // { categoryIndex, causeIndex, isNew }
   const [newItemText, setNewItemText] = useState('');
-  const [diagramData, setDiagramData] = useState({
-    problem: 'Definir el problema central',
-    categories: [
-      { id: '1', name: 'Maquinaria', causes: [] },
-      { id: '2', name: 'Materiales', causes: [] },
-      { id: '3', name: 'Métodos', causes: [] },
-      { id: '4', name: 'Mano de Obra', causes: [] },
-      { id: '5', name: 'Medio Ambiente', causes: [] },
-      { id: '6', name: 'Medición', causes: [] }
-    ]
-  });
-  
-  // Cargar datos del proyecto
-  useEffect(() => {
-    if (project && project.causeEffectDiagram) {
-      setDiagramData(project.causeEffectDiagram);
-    }
-  }, [project]);
 
-  // Función para guardar cambios
-  const saveChanges = () => {
-    if (!project) return;
-    
-    setIsSaving(true);
-    
-    // Guardar los cambios al proyecto
-    updateProject(projectId, {
-      ...project,
-      causeEffectDiagram: diagramData
-    });
-    
-    // Simular tiempo de guardado
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsEditing(false);
-      showNotification("Diagrama guardado correctamente", "success");
-    }, 800);
+  const [exampleMode, setExampleMode] = useState(false);
+  const [confirmKind, setConfirmKind] = useState(null); // 'example' | 'discard' | null
+  const exampleSnapshotRef = useRef(null);
+  // El CTA del estado vacío no escribe un dato falso solo para "desbloquear"
+  // el formulario: revela el editor y deja que el usuario escriba el efecto.
+  const [showEditor, setShowEditor] = useState(false);
+
+  if (!t.ready) return null;
+
+  const hasContent = Boolean(t.data.problem.trim()) || t.data.categories.some((c) => c.causes.length > 0);
+  const isEmpty = !hasContent && !showEditor;
+
+  // --- Edición del problema y las categorías ------------------------------
+  const updateProblem = (value) => t.patch({ problem: value });
+
+  const updateCategoryName = (categoryIndex, value) => {
+    t.setData((prev) => ({
+      ...prev,
+      categories: prev.categories.map((cat, idx) => (idx === categoryIndex ? { ...cat, name: value } : cat)),
+    }));
   };
 
-  // Función para alternar el modo pantalla completa
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  // Función para añadir una nueva causa
-  const addCause = (categoryId) => {
-    setActiveCategory(categoryId);
-    setEditingItem({
-      isNew: true,
-      categoryId: categoryId
-    });
+  // --- Edición de causas ---------------------------------------------------
+  const addCause = (categoryIndex) => {
+    setEditingItem({ categoryIndex, causeIndex: null, isNew: true });
     setNewItemText('');
   };
 
-  // Función para editar una causa existente
-  const editCause = (categoryId, causeId, text) => {
-    setActiveCategory(categoryId);
-    setEditingItem({
-      isNew: false,
-      categoryId: categoryId,
-      causeId: causeId
-    });
+  const editCause = (categoryIndex, causeIndex, text) => {
+    setEditingItem({ categoryIndex, causeIndex, isNew: false });
     setNewItemText(text);
   };
 
-  // Función para eliminar una causa
-  const deleteCause = (categoryId, causeId) => {
-    setDiagramData(prev => ({
-      ...prev,
-      categories: prev.categories.map(category => 
-        category.id === categoryId 
-          ? { 
-              ...category, 
-              causes: category.causes.filter(cause => cause.id !== causeId) 
-            }
-          : category
-      )
-    }));
-    
-    showNotification("Causa eliminada correctamente", "info");
-  };
-
-  // Función para guardar una causa (nueva o editada)
-  const saveCause = () => {
-    if (!editingItem || !newItemText.trim()) {
-      setEditingItem(null);
-      return;
-    }
-
-    setDiagramData(prev => ({
-      ...prev,
-      categories: prev.categories.map(category => {
-        if (category.id === editingItem.categoryId) {
-          if (editingItem.isNew) {
-            // Añadir nueva causa
-            showNotification("Causa añadida correctamente", "success");
-            return {
-              ...category,
-              causes: [
-                ...category.causes,
-                { id: Date.now().toString(), text: newItemText.trim() }
-              ]
-            };
-          } else {
-            // Actualizar causa existente
-            showNotification("Causa actualizada correctamente", "success");
-            return {
-              ...category,
-              causes: category.causes.map(cause => 
-                cause.id === editingItem.causeId
-                  ? { ...cause, text: newItemText.trim() }
-                  : cause
-              )
-            };
-          }
-        }
-        return category;
-      })
-    }));
-
-    setEditingItem(null);
-    setNewItemText('');
-  };
-
-  // Función para cancelar la edición de una causa
   const cancelCauseEdit = () => {
     setEditingItem(null);
     setNewItemText('');
   };
 
-  // Función para editar el problema central
-  const editProblem = () => {
-    if (!isEditing) return;
-    
-    const newProblem = prompt("Define el problema central:", diagramData.problem);
-    if (newProblem && newProblem.trim()) {
-      setDiagramData(prev => ({
-        ...prev,
-        problem: newProblem.trim()
-      }));
+  const saveCause = () => {
+    if (!editingItem || !newItemText.trim()) {
+      setEditingItem(null);
+      return;
     }
+    const { categoryIndex, causeIndex, isNew } = editingItem;
+    t.setData((prev) => ({
+      ...prev,
+      categories: prev.categories.map((cat, idx) => {
+        if (idx !== categoryIndex) return cat;
+        if (isNew) {
+          return { ...cat, causes: [...cat.causes, newItemText.trim()] };
+        }
+        return { ...cat, causes: cat.causes.map((c, ci) => (ci === causeIndex ? newItemText.trim() : c)) };
+      }),
+    }));
+    setEditingItem(null);
+    setNewItemText('');
   };
 
-  // Función para editar el nombre de una categoría
-  const editCategory = (categoryId) => {
-    if (!isEditing) return;
-    
-    const category = diagramData.categories.find(c => c.id === categoryId);
-    if (!category) return;
-    
-    const newName = prompt("Nombre de la categoría:", category.name);
-    if (newName && newName.trim()) {
-      setDiagramData(prev => ({
-        ...prev,
-        categories: prev.categories.map(c => 
-          c.id === categoryId ? { ...c, name: newName.trim() } : c
-        )
-      }));
+  const deleteCause = (categoryIndex, causeIndex) => {
+    t.setData((prev) => ({
+      ...prev,
+      categories: prev.categories.map((cat, idx) =>
+        idx !== categoryIndex ? cat : { ...cat, causes: cat.causes.filter((_, ci) => ci !== causeIndex) }
+      ),
+    }));
+  };
+
+  const reorderCauses = (categoryIndex, order) => {
+    t.setData((prev) => ({
+      ...prev,
+      categories: prev.categories.map((cat, idx) =>
+        idx !== categoryIndex ? cat : { ...cat, causes: order.map((i) => cat.causes[i]) }
+      ),
+    }));
+  };
+
+  // --- Modo ejemplo --------------------------------------------------------
+  const openExample = () => {
+    if (t.isDirty) {
+      setConfirmKind('example');
+      return;
     }
-  };
-  
-  // Si no hay proyecto, no mostrar nada
-  if (!project) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Cargando proyecto...</p>
-      </div>
-    );
-  }
-
-  // Estados para notificaciones
-  const [notification, setNotification] = useState({
-    show: false,
-    message: '',
-    type: 'success'
-  });
-
-  // Función para mostrar notificación
-  const showNotification = (message, type = 'success') => {
-    setNotification({
-      show: true,
-      message,
-      type
-    });
+    applyExample();
   };
 
-  // Función para cerrar notificación
-  const closeNotification = () => {
-    setNotification(prev => ({ ...prev, show: false }));
+  const applyExample = () => {
+    exampleSnapshotRef.current = t.data;
+    const applied = t.loadExample(0);
+    if (applied) setExampleMode(true);
+    setConfirmKind(null);
   };
 
-  // Clase condicional para el contenedor principal cuando está en pantalla completa
-  const containerClass = isFullscreen
-    ? "fixed inset-0 z-50 overflow-auto bg-white dark:bg-gray-900 p-4"
-    : "min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-gray-900 p-4";
+  const adoptExample = () => {
+    t.save();
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  const discardExample = () => {
+    if (exampleSnapshotRef.current) t.setData(exampleSnapshotRef.current);
+    setExampleMode(false);
+    exampleSnapshotRef.current = null;
+  };
+
+  // --- Cancelar / descartar cambios ----------------------------------------
+  const requestDiscard = () => {
+    if (!t.isDirty) return;
+    setConfirmKind('discard');
+  };
+
+  const confirmDiscard = () => {
+    t.discard();
+    setConfirmKind(null);
+  };
+
+  const exampleTitle = t.exampleTitles?.[0] || 'Ejemplo';
 
   return (
-    <div className={containerClass}>
-      <div className={`${isFullscreen ? '' : 'max-w-6xl mx-auto'}`}>
-        {/* Componente de notificación */}
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          show={notification.show}
-          onClose={closeNotification}
-          duration={3000}
-        />
-        
-        {/* Cabecera */}
-        <ToolHeader
-          icon={GitBranch}
-          title="Diagrama Causa-Efecto"
-          description="También conocido como diagrama de Ishikawa o espina de pescado, identifica posibles causas de un problema."
-          isEditing={isEditing}
-          setIsEditing={setIsEditing}
-          isFullscreen={isFullscreen}
-          toggleFullscreen={toggleFullscreen}
-          saveChanges={saveChanges}
-          isSaving={isSaving}
-        />
-        
-        {/* Contenido principal */}
-        <div 
-          className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 min-h-[600px] relative overflow-hidden mb-6"
-          ref={diagramRef}
-        >
-          {/* Diagrama Causa-Efecto (Ishikawa) */}
-          <div className="w-full h-full flex flex-col">
-            {/* Problema central */}
-            <motion.div 
-              className="flex justify-center mb-8 mt-4"
-              whileHover={isEditing ? { scale: 1.05 } : {}}
+    <div className="p-4 sm:p-6">
+      {/* Barra de estado + acciones */}
+      <div className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus tool={t} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && (
+            <GradientButton
+              variant="outline"
+              size="sm"
+              onClick={openExample}
+              leadingIcon={<Eye size={14} aria-hidden="true" />}
             >
-              <div 
-                className={`px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg shadow-md text-center max-w-md transform transition-all duration-300 ${isEditing ? 'cursor-pointer hover:shadow-lg' : ''}`}
-                onClick={isEditing ? editProblem : undefined}
-              >
-                <h3 className="font-bold text-xl">{diagramData.problem}</h3>
-                {isEditing && <p className="text-xs mt-1 opacity-80">(Clic para editar)</p>}
-              </div>
+              Ver un ejemplo
+            </GradientButton>
+          )}
+          {t.isDirty && (
+            <GradientButton variant="ghost" size="sm" onClick={requestDiscard}>
+              Cancelar
+            </GradientButton>
+          )}
+          <GradientButton
+            variant="success"
+            size="sm"
+            disabled={!t.isDirty || t.isSaving}
+            onClick={() => t.save()}
+            leadingIcon={t.isSaving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+          >
+            Guardar
+          </GradientButton>
+        </div>
+      </div>
+
+      {/* Banner de modo ejemplo */}
+      <AnimatePresence>
+        {exampleMode && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.base}
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="rounded-full bg-info px-2 py-0.5 text-xs font-medium text-white">Ejemplo</span>
+              <span className="font-medium text-content">{exampleTitle}</span>
+              <span className="text-content-secondary">
+                Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <GradientButton variant="outline" size="sm" onClick={discardExample} leadingIcon={<Undo2 size={14} aria-hidden="true" />}>
+                Deshacer
+              </GradientButton>
+              <GradientButton variant="solid" size="sm" onClick={adoptExample}>
+                Usar como punto de partida
+              </GradientButton>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={exampleMode ? 'space-y-6 rounded-xl p-1 ring-1 ring-info/30' : 'space-y-6'}>
+        {isEmpty ? (
+          <EmptyState
+            title="Toda causa tiene una raíz"
+            description="Define el efecto que quieres explicar y despliega las espinas: Personal, Métodos, Máquinas, Materiales…"
+            action={
+              <GradientButton onClick={() => setShowEditor(true)} leadingIcon={<Plus size={16} aria-hidden="true" />}>
+                Definir el efecto
+              </GradientButton>
+            }
+            secondaryAction={
+              t.hasExamples && (
+                <GradientButton variant="outline" onClick={openExample}>
+                  Ver un ejemplo
+                </GradientButton>
+              )
+            }
+          />
+        ) : (
+          <>
+            {/* Problema central */}
+            <motion.div
+              initial={shouldReduceMotion ? false : 'hidden'}
+              animate="visible"
+              variants={fadeInUp}
+              className="rounded-xl border border-line bg-surface p-4 sm:p-6"
+            >
+              <label htmlFor="cause-effect-problem" className="mb-1.5 block text-xs font-medium text-content-secondary">
+                Problema central (el &ldquo;efecto&rdquo; del diagrama)
+              </label>
+              <input
+                id="cause-effect-problem"
+                type="text"
+                value={t.data.problem}
+                onChange={(e) => updateProblem(e.target.value)}
+                placeholder="Ej. Ciclo de cobranza extendido"
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-lg font-semibold text-content placeholder:font-normal placeholder:text-content-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
             </motion.div>
 
-            {/* Línea principal horizontal con decoración */}
-            <div className="relative flex-1 flex flex-col justify-center">
-              <div className="absolute left-0 right-0 h-2 bg-gradient-to-r from-gray-300 via-blue-300 to-gray-300 dark:from-gray-700 dark:via-blue-700 dark:to-gray-700 rounded-full"></div>
-              
-              {/* Flecha decorativa hacia el problema */}
-              <div className="absolute right-1/2 transform translate-x-1/2 -translate-y-5 text-blue-500 dark:text-blue-400">
-                <ArrowRight size={20} />
-              </div>
-              
-              {/* Categorías y causas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
-                {diagramData.categories.map((category) => (
-                  <motion.div 
-                    key={category.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    whileHover={{ y: -5 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col"
+            {/* Categorías y causas */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {t.data.categories.map((category, categoryIndex) => (
+                <motion.div
+                  key={categoryIndex}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...transition.enter, delay: shouldReduceMotion ? 0 : categoryIndex * 0.03 }}
+                  className="flex flex-col rounded-xl border border-line bg-surface p-4"
+                >
+                  <div className="mb-3 flex items-center gap-2 border-b border-line-subtle pb-2">
+                    <label htmlFor={`cause-effect-cat-${categoryIndex}`} className="sr-only">
+                      Nombre de la categoría {categoryIndex + 1}
+                    </label>
+                    <input
+                      id={`cause-effect-cat-${categoryIndex}`}
+                      type="text"
+                      value={category.name}
+                      onChange={(e) => updateCategoryName(categoryIndex, e.target.value)}
+                      placeholder={`Categoría ${categoryIndex + 1}`}
+                      className="w-full truncate rounded-md border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold text-brand placeholder:text-content-muted hover:border-line focus:border-brand focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    />
+                    <span className="tabular-nums shrink-0 rounded-full bg-surface-sunken px-1.5 py-0.5 text-2xs font-medium text-content-muted">
+                      {category.causes.length}
+                    </span>
+                  </div>
+
+                  <Reorder.Group
+                    axis="y"
+                    values={category.causes.map((_, i) => i)}
+                    onReorder={(order) => reorderCauses(categoryIndex, order)}
+                    className="flex-1 space-y-2"
                   >
-                    {/* Título de la categoría */}
-                    <div 
-                      className={`mb-2 text-center font-bold text-blue-600 dark:text-blue-400 group ${isEditing ? 'cursor-pointer hover:text-blue-800 dark:hover:text-blue-300' : ''}`}
-                      onClick={() => isEditing && editCategory(category.id)}
-                    >
-                      <span className="text-lg border-b-2 border-blue-300 dark:border-blue-700 pb-1 inline-block transition-all duration-300 group-hover:border-blue-600 dark:group-hover:border-blue-400">
-                        {category.name}
-                      </span>
-                      {isEditing && <p className="text-xs font-normal text-gray-500 dark:text-gray-400">(Clic para editar)</p>}
-                    </div>
-                    
-                    {/* Línea de conexión vertical con decoración */}
-                    <div className="relative">
-                      <div className="h-20 w-1.5 bg-gradient-to-b from-blue-400 to-blue-600 dark:from-blue-600 dark:to-blue-800 mx-auto rounded-full"></div>
-                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 bg-blue-500 dark:bg-blue-400 rounded-full"></div>
-                    </div>
-                    
-                    {/* Lista de causas */}
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-750 rounded-lg p-4 flex-1 border border-blue-100 dark:border-gray-600 overflow-y-auto max-h-[250px] shadow-md">
-                      <Reorder.Group 
-                        axis="y" 
-                        values={category.causes.map(c => c.id)} 
-                        onReorder={(ids) => {
-                          if (!isEditing) return;
-                          
-                          setDiagramData(prev => ({
-                            ...prev,
-                            categories: prev.categories.map(c => 
-                              c.id === category.id
-                                ? {
-                                    ...c,
-                                    causes: ids.map(id => c.causes.find(cause => cause.id === id))
-                                  }
-                                : c
-                            )
-                          }));
-                        }}
-                        className="space-y-2"
-                      >
-                        {category.causes.map((cause) => (
-                          <Reorder.Item
-                            key={cause.id}
-                            value={cause.id}
-                            disabled={!isEditing}
-                          >
-                            <motion.div
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              whileHover={{ scale: isEditing ? 1.02 : 1 }}
-                              className={`flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm border-l-4 border-blue-400 dark:border-blue-600 ${isEditing ? 'cursor-move' : ''}`}
+                    {category.causes.map((cause, causeIndex) => (
+                      <Reorder.Item key={causeIndex} value={causeIndex}>
+                        <div className="group flex items-center gap-2 rounded-lg border-l-4 border-brand bg-surface-sunken p-2.5 shadow-xs">
+                          <Move size={13} className="shrink-0 cursor-move text-content-muted" aria-hidden="true" />
+                          <span className="flex-1 text-sm text-content">{cause}</span>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-fast group-hover:opacity-100 group-focus-within:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => editCause(categoryIndex, causeIndex, cause)}
+                              aria-label={`Editar causa: ${cause}`}
+                              className="rounded-md p-1 text-content-muted transition-colors duration-fast hover:bg-brand/10 hover:text-brand"
                             >
-                              <div className="flex items-center">
-                                {isEditing && <Move size={14} className="mr-2 text-gray-400" />}
-                                <span className="text-sm">{cause.text}</span>
-                              </div>
-                              {isEditing && (
-                                <div className="flex space-x-1 shrink-0">
-                                  <motion.button
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    onClick={() => editCause(category.id, cause.id, cause.text)}
-                                    className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 rounded-full hover:bg-blue-50 dark:hover:bg-gray-700"
-                                  >
-                                    <Edit size={14} />
-                                  </motion.button>
-                                  <motion.button
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    onClick={() => deleteCause(category.id, cause.id)}
-                                    className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 rounded-full hover:bg-red-50 dark:hover:bg-gray-700"
-                                  >
-                                    <Trash2 size={14} />
-                                  </motion.button>
-                                </div>
-                              )}
-                            </motion.div>
-                          </Reorder.Item>
-                        ))}
-                      </Reorder.Group>
-                      
-                      {/* Formulario para añadir/editar causa */}
-                      {isEditing && editingItem && editingItem.categoryId === category.id && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex flex-col space-y-2 p-3 mt-2 bg-blue-100 dark:bg-gray-700 rounded-lg border border-blue-200 dark:border-gray-600"
-                        >
-                          <input
-                            type="text"
-                            value={newItemText}
-                            onChange={(e) => setNewItemText(e.target.value)}
-                            placeholder="Escribir causa..."
-                            className="text-sm p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                            autoFocus
-                          />
-                          <div className="flex justify-end space-x-2">
-                            <motion.button 
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={saveCause}
-                              className="p-1.5 text-xs bg-green-500 text-white rounded-md hover:bg-green-600 flex items-center"
+                              <Pencil size={13} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteCause(categoryIndex, causeIndex)}
+                              aria-label={`Eliminar causa: ${cause}`}
+                              className="rounded-md p-1 text-content-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger-on"
                             >
-                              <Check size={12} className="mr-1" /> Guardar
-                            </motion.button>
-                            <motion.button 
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={cancelCauseEdit}
-                              className="p-1.5 text-xs bg-gray-500 text-white rounded-md hover:bg-gray-600 flex items-center"
-                            >
-                              <X size={12} className="mr-1" /> Cancelar
-                            </motion.button>
+                              <Trash2 size={13} aria-hidden="true" />
+                            </button>
                           </div>
-                        </motion.div>
-                      )}
-                      
-                      {/* Botón para añadir nueva causa */}
-                      {isEditing && (!editingItem || editingItem.categoryId !== category.id) && (
-                        <motion.button
-                          whileHover={{ scale: 1.03, y: -2 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => addCause(category.id)}
-                          className="w-full text-sm py-2 px-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md flex items-center justify-center hover:from-blue-600 hover:to-blue-700 shadow-sm mt-3"
-                        >
-                          <Plus size={16} className="mr-1" /> Añadir causa
-                        </motion.button>
-                      )}
+                        </div>
+                      </Reorder.Item>
+                    ))}
+                  </Reorder.Group>
+
+                  {/* Formulario para añadir/editar causa */}
+                  {editingItem && editingItem.categoryIndex === categoryIndex ? (
+                    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-line bg-surface-sunken p-2.5">
+                      <input
+                        type="text"
+                        value={newItemText}
+                        onChange={(e) => setNewItemText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveCause();
+                          if (e.key === 'Escape') cancelCauseEdit();
+                        }}
+                        placeholder="Escribir causa…"
+                        aria-label="Texto de la causa"
+                        className="rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-content focus:border-brand focus:outline-none focus:ring-2 focus:ring-ring/30"
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2">
+                        <GradientButton variant="ghost" size="sm" onClick={cancelCauseEdit} leadingIcon={<X size={13} aria-hidden="true" />}>
+                          Cancelar
+                        </GradientButton>
+                        <GradientButton variant="success" size="sm" onClick={saveCause} leadingIcon={<Check size={13} aria-hidden="true" />}>
+                          Guardar
+                        </GradientButton>
+                      </div>
                     </div>
-                  </motion.div>
-                ))}
-              </div>
+                  ) : (
+                    <GradientButton
+                      variant="outline"
+                      size="sm"
+                      fullWidth
+                      onClick={() => addCause(categoryIndex)}
+                      leadingIcon={<Plus size={14} aria-hidden="true" />}
+                      className="mt-3"
+                    >
+                      Añadir causa
+                    </GradientButton>
+                  )}
+                </motion.div>
+              ))}
             </div>
-          </div>
-          
-          {/* Marca de agua decorativa */}
-          <div className="absolute bottom-2 right-2 text-gray-200 dark:text-gray-800 opacity-30 select-none pointer-events-none">
-            <GitBranch size={80} />
-          </div>
-        </div>
-        
-        {/* Leyenda o información adicional */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="mt-6 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6"
+          </>
+        )}
+
+        {/* Cómo utilizar el diagrama */}
+        <motion.div
+          initial={shouldReduceMotion ? false : 'hidden'}
+          animate="visible"
+          variants={fadeInUp}
+          className="rounded-xl border border-line bg-surface p-4 sm:p-6"
         >
-          <h3 className="font-bold text-lg text-gray-800 dark:text-white mb-3 flex items-center">
-            <Info size={18} className="mr-2 text-blue-500" /> Cómo utilizar el diagrama
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-content">
+            <Info size={16} className="text-brand" aria-hidden="true" /> Cómo utilizar el diagrama
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-start">
-              <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-full mr-3">
-                <Lightbulb size={18} className="text-blue-600 dark:text-blue-400" />
+          <div className="grid grid-cols-1 gap-4 text-sm text-content-secondary md:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info-soft text-info-on">
+                <Lightbulb size={16} aria-hidden="true" />
               </div>
               <div>
-                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">Define el problema</p>
-                <p>Establece claramente el problema central que deseas analizar.</p>
+                <p className="mb-1 font-medium text-content">Define el problema</p>
+                <p>Establece claramente el efecto central que deseas analizar.</p>
               </div>
             </div>
-            <div className="flex items-start">
-              <div className="bg-green-100 dark:bg-green-900 p-2 rounded-full mr-3">
-                <GitBranch size={18} className="text-green-600 dark:text-green-400" />
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success-soft text-success-on">
+                <GitBranch size={16} aria-hidden="true" />
               </div>
               <div>
-                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">Identifica categorías</p>
-                <p>Utiliza las "6M": Método, Mano de obra, Materiales, Maquinaria, Medición y Medio ambiente.</p>
+                <p className="mb-1 font-medium text-content">Identifica categorías</p>
+                <p>Utiliza las &ldquo;6M&rdquo;: Método, Mano de obra, Materiales, Maquinaria, Medición y Medio ambiente.</p>
               </div>
             </div>
-            <div className="flex items-start">
-              <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-full mr-3">
-                <Plus size={18} className="text-purple-600 dark:text-purple-400" />
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+                <Plus size={16} aria-hidden="true" />
               </div>
               <div>
-                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">Añade causas</p>
+                <p className="mb-1 font-medium text-content">Añade causas</p>
                 <p>Para cada categoría, identifica todas las posibles causas del problema.</p>
               </div>
             </div>
-            <div className="flex items-start">
-              <div className="bg-amber-100 dark:bg-amber-900 p-2 rounded-full mr-3">
-                <Flag size={18} className="text-amber-600 dark:text-amber-400" />
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning-on">
+                <Flag size={16} aria-hidden="true" />
               </div>
               <div>
-                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">Analiza y prioriza</p>
+                <p className="mb-1 font-medium text-content">Analiza y prioriza</p>
                 <p>Evalúa las causas para identificar las más significativas y planificar acciones.</p>
               </div>
             </div>
           </div>
         </motion.div>
-        
-        {/* Componente de navegación entre herramientas */}
-        <ToolsNavigation currentTool="cause-effect" projectId={projectId} />
       </div>
+
+      {/* Confirmación: cargar ejemplo con borrador sucio */}
+      <Modal
+        open={confirmKind === 'example'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton variant="solid" onClick={applyExample}>
+              Ver el ejemplo
+            </GradientButton>
+          </>
+        }
+      />
+
+      {/* Confirmación: descartar cambios sin guardar */}
+      <Modal
+        open={confirmKind === 'discard'}
+        onClose={() => setConfirmKind(null)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmKind(null)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton variant="danger" onClick={confirmDiscard}>
+              Descartar
+            </GradientButton>
+          </>
+        }
+      />
     </div>
   );
-};
+}
 
-export default CauseEffectDiagram;
+/** Máquina de estados de guardado (idéntica a la definida para las 14 herramientas). */
+function SaveStatus({ tool }) {
+  let icon = <span className="h-2 w-2 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let tone = 'text-content-muted';
+
+  if (tool.error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    tone = 'text-danger-on';
+  } else if (tool.isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    tone = 'text-content-secondary';
+  } else if (tool.justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    tone = 'text-success-on';
+  } else if (tool.isDirty) {
+    icon = <span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    tone = 'text-warning-on';
+  } else if (tool.lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(tool.lastSavedAt)}`;
+    tone = 'text-success-on';
+  }
+
+  return (
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm font-medium ${tone}`}>
+      {icon}
+      <span className="tabular-nums">{text}</span>
+      {tool.error && (
+        <button type="button" onClick={() => tool.save()} className="ml-1 underline underline-offset-2 hover:no-underline">
+          Reintentar
+        </button>
+      )}
+    </p>
+  );
+}

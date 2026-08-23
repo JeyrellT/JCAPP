@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLeanSixSigma } from '../contexts/LeanSixSigmaContext';
-import { motion } from 'framer-motion';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Save,
   Edit,
+  Eye,
   Plus,
   Trash2,
   GitBranch,
@@ -18,74 +18,212 @@ import {
   Truck,
   AlertTriangle,
   Clipboard,
-  HelpCircle
+  HelpCircle,
+  Loader2,
+  Check,
+  Table as TableIcon,
+  LayoutGrid,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import useToolData from '../hooks/useToolData';
+import EmptyState from '../components/common/EmptyState';
+import GradientButton from '../components/common/GradientButton';
+import Modal from '../components/ui/Modal';
+import { formatNumber, formatPercent, formatRelative } from '../lib/format';
+import { fadeInUp } from '../lib/motion';
 
 /**
  * Componente Mapa de Flujo de Valor (Value Stream Mapping)
- * 
+ *
  * @param {Object} props - Propiedades del componente
  * @param {string} props.projectId - ID del proyecto
  */
+const TOOL_ID = 'value-stream-map';
+
+const DEFAULT_DATA = {
+  processes: [],
+  connections: [],
+  customer: { name: 'Cliente', demands: '' },
+  supplier: { name: 'Proveedor', supplies: '' },
+  viewMode: 'current', // 'current' | 'future' — solo cambia el rótulo del diagrama
+  currentState: { totalLeadTime: '', valueAddedTime: '', mainWastes: [] },
+  futureState: { targetLeadTime: '', improvements: [] },
+};
+
+// Rescate de la clave legacy `project.valueStreamMap` (raíz del proyecto).
+// El `currentState` viejo era un booleano (true = estado actual, false =
+// estado futuro); el nuevo `currentState` es un objeto de resumen, así que se
+// reconstruye a mano en vez de esparcir el objeto viejo tal cual.
+const legacyRescue = (project) => {
+  const old = project?.valueStreamMap;
+  if (!old || typeof old !== 'object') return null;
+  return {
+    processes: Array.isArray(old.processes) ? old.processes : [],
+    connections: Array.isArray(old.connections) ? old.connections : [],
+    customer: old.customer && typeof old.customer === 'object' ? old.customer : DEFAULT_DATA.customer,
+    supplier: old.supplier && typeof old.supplier === 'object' ? old.supplier : DEFAULT_DATA.supplier,
+    viewMode: old.currentState === false ? 'future' : 'current',
+    currentState: DEFAULT_DATA.currentState,
+    futureState: DEFAULT_DATA.futureState,
+  };
+};
+
+// --- Subcomponentes de presentación (sin estado de persistencia propio) ----
+
+function SaveStatus({ isDirty, isSaving, justSaved, lastSavedAt, error, onRetry }) {
+  let icon = <span className="h-1.5 w-1.5 rounded-full bg-content-muted" aria-hidden="true" />;
+  let text = 'Sin cambios';
+  let tone = 'text-content-muted';
+
+  if (error) {
+    icon = <AlertTriangle size={14} aria-hidden="true" />;
+    text = 'No se pudo guardar';
+    tone = 'text-danger-on';
+  } else if (isSaving) {
+    icon = <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    text = 'Guardando cambios…';
+    tone = 'text-content-secondary';
+  } else if (justSaved) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = 'Guardado';
+    tone = 'text-success-on';
+  } else if (isDirty) {
+    icon = <span className="h-1.5 w-1.5 rounded-full bg-warning-on" aria-hidden="true" />;
+    text = 'Cambios sin guardar';
+    tone = 'text-warning-on';
+  } else if (lastSavedAt) {
+    icon = <Check size={14} aria-hidden="true" />;
+    text = `Guardado ${formatRelative(lastSavedAt)}`;
+    tone = 'text-success-on';
+  }
+
+  return (
+    <p role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm ${tone}`}>
+      {icon}
+      <span>{text}</span>
+      {error && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="ml-1 font-medium underline underline-offset-2 hover:text-content"
+        >
+          Reintentar
+        </button>
+      )}
+    </p>
+  );
+}
+
+function TextField({ label, value, onChange, placeholder }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-content">{label}</span>
+      <input
+        type="text"
+        className="input"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function EditableList({ label, items, onChange, addLabel, placeholder }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-content">{label}</span>
+        <button
+          type="button"
+          onClick={() => onChange([...(items || []), ''])}
+          aria-label={addLabel}
+          className="rounded-md p-1 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-content"
+        >
+          <Plus size={14} aria-hidden="true" />
+        </button>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {(items || []).map((item, idx) => (
+          <li key={idx} className="flex items-center gap-2">
+            <input
+              type="text"
+              className="input"
+              value={item}
+              placeholder={placeholder}
+              onChange={(e) => {
+                const next = [...items];
+                next[idx] = e.target.value;
+                onChange(next);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => onChange(items.filter((_, i) => i !== idx))}
+              aria-label={`Eliminar elemento ${idx + 1}`}
+              className="rounded-md p-1.5 text-content-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger-on"
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+        {(!items || items.length === 0) && (
+          <li className="text-sm text-content-muted">Sin elementos todavía.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 const ValueStreamMap = ({ projectId }) => {
-  const { getProject, updateProject } = useLeanSixSigma();
-  const project = getProject(projectId);
+  const t = useToolData(projectId, TOOL_ID, DEFAULT_DATA, { legacy: legacyRescue });
+  const shouldReduceMotion = useReducedMotion();
   const mapRef = useRef(null);
 
-  // Estado para el VSM
-  const [vsm, setVsm] = useState(() => {
-    return project?.valueStreamMap || {
-      processes: [],
-      connections: [],
-      metrics: {
-        leadTime: 0,
-        processTime: 0,
-        waitingTime: 0,
-        valueAddedRatio: 0
-      },
-      customer: { name: 'Cliente', demands: '' },
-      supplier: { name: 'Proveedor', supplies: '' },
-      currentState: true
-    };
-  });
-
-  // Estado para edición
-  const [editMode, setEditMode] = useState(!project?.valueStreamMap);
+  // Estado puramente de interfaz (no se persiste): selección, modo edición,
+  // formato de vista, panel de ayuda.
+  const [editMode, setEditMode] = useState(false);
+  const [displayFormat, setDisplayFormat] = useState('diagram'); // 'diagram' | 'table'
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [connectionStart, setConnectionStart] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
 
-  // Actualizar el proyecto cuando cambia el VSM
-  useEffect(() => {
-    if (!editMode && project) {
-      updateProject(projectId, { valueStreamMap: vsm });
-    }
-  }, [editMode]);
+  // Modo ejemplo (no gestionado por el hook: loadExample() nunca guarda).
+  const [exampleMode, setExampleMode] = useState(false);
+  const [confirmLoadExample, setConfirmLoadExample] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const preExampleSnapshotRef = useRef(null);
 
-  // Calcular métricas del VSM
-  useEffect(() => {
-    if (vsm.processes.length > 0) {
-      const leadTime = vsm.processes.reduce((sum, process) => sum + (parseFloat(process.cycleTime) || 0) + (parseFloat(process.waitTime) || 0), 0);
-      const processTime = vsm.processes.reduce((sum, process) => sum + (parseFloat(process.cycleTime) || 0), 0);
-      const waitingTime = vsm.processes.reduce((sum, process) => sum + (parseFloat(process.waitTime) || 0), 0);
-      const valueAddedRatio = leadTime > 0 ? (processTime / leadTime) * 100 : 0;
+  const effectiveEditMode = exampleMode ? false : editMode;
 
-      setVsm(prev => ({
-        ...prev,
-        metrics: {
-          leadTime,
-          processTime,
-          waitingTime,
-          valueAddedRatio
-        }
-      }));
-    }
+  // Refresca el texto relativo de "Guardado hace…" sin depender de que otra
+  // cosa vuelva a renderizar el componente.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((v) => v + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const vsm = t.data;
+
+  // Métricas derivadas del diagrama. Se calculan al vuelo: no se persisten
+  // como campo aparte para no duplicar fuente de verdad con `processes`.
+  const metrics = useMemo(() => {
+    const processes = vsm.processes || [];
+    const leadTime = processes.reduce(
+      (sum, p) => sum + (parseFloat(p.cycleTime) || 0) + (parseFloat(p.waitTime) || 0),
+      0
+    );
+    const processTime = processes.reduce((sum, p) => sum + (parseFloat(p.cycleTime) || 0), 0);
+    const waitingTime = processes.reduce((sum, p) => sum + (parseFloat(p.waitTime) || 0), 0);
+    const valueAddedRatio = leadTime > 0 ? (processTime / leadTime) * 100 : 0;
+    return { leadTime, processTime, waitingTime, valueAddedRatio };
   }, [vsm.processes]);
 
-  // Función para añadir un nuevo proceso
+  // --- Acciones sobre el diagrama ------------------------------------------
+
   const addProcess = () => {
     const newProcess = {
       id: `proc-${Date.now()}`,
@@ -96,185 +234,178 @@ const ValueStreamMap = ({ projectId }) => {
       uptime: 100,
       inventory: 0,
       defectRate: 0,
-      x: vsm.processes.length * 180 + 200,
-      y: 200
+      x: (vsm.processes?.length || 0) * 180 + 200,
+      y: 200,
     };
 
-    setVsm(prev => ({
-      ...prev,
-      processes: [...prev.processes, newProcess]
-    }));
-
+    t.setData((prev) => ({ ...prev, processes: [...prev.processes, newProcess] }));
+    setEditMode(true);
     setSelectedProcess(newProcess);
   };
 
-  // Función para actualizar un proceso
   const updateProcess = (id, data) => {
-    setVsm(prev => ({
+    t.setData((prev) => ({
       ...prev,
-      processes: prev.processes.map(proc => 
-        proc.id === id ? { ...proc, ...data } : proc
-      )
+      processes: prev.processes.map((proc) => (proc.id === id ? { ...proc, ...data } : proc)),
     }));
+    setSelectedProcess((prev) => (prev && prev !== 'supplier' && prev !== 'customer' && prev.id === id ? { ...prev, ...data } : prev));
   };
 
-  // Función para eliminar un proceso
   const deleteProcess = (id) => {
-    setVsm(prev => ({
+    t.setData((prev) => ({
       ...prev,
-      processes: prev.processes.filter(proc => proc.id !== id),
-      connections: prev.connections.filter(
-        conn => conn.source !== id && conn.target !== id
-      )
+      processes: prev.processes.filter((proc) => proc.id !== id),
+      connections: prev.connections.filter((conn) => conn.source !== id && conn.target !== id),
     }));
-
-    if (selectedProcess?.id === id) {
-      setSelectedProcess(null);
-    }
+    if (selectedProcess?.id === id) setSelectedProcess(null);
   };
 
-  // Función para iniciar la creación de una conexión
   const startConnection = (processId) => {
     setCreatingConnection(true);
     setConnectionStart(processId);
   };
 
-  // Función para completar la creación de una conexión
   const completeConnection = (targetId) => {
     if (connectionStart && connectionStart !== targetId) {
       const newConnection = {
         id: `conn-${Date.now()}`,
         source: connectionStart,
         target: targetId,
-        type: 'material', // material o information
+        type: 'material',
         pushPull: 'push',
         quantity: 0,
-        frequency: 'diaria'
+        frequency: 'diaria',
       };
-
-      setVsm(prev => ({
-        ...prev,
-        connections: [...prev.connections, newConnection]
-      }));
-
+      t.setData((prev) => ({ ...prev, connections: [...prev.connections, newConnection] }));
       setSelectedConnection(newConnection);
     }
-
     setCreatingConnection(false);
     setConnectionStart(null);
   };
 
-  // Función para actualizar una conexión
   const updateConnection = (id, data) => {
-    setVsm(prev => ({
+    t.setData((prev) => ({
       ...prev,
-      connections: prev.connections.map(conn => 
-        conn.id === id ? { ...conn, ...data } : conn
-      )
+      connections: prev.connections.map((conn) => (conn.id === id ? { ...conn, ...data } : conn)),
     }));
+    setSelectedConnection((prev) => (prev && prev.id === id ? { ...prev, ...data } : prev));
   };
 
-  // Función para eliminar una conexión
   const deleteConnection = (id) => {
-    setVsm(prev => ({
-      ...prev,
-      connections: prev.connections.filter(conn => conn.id !== id)
-    }));
-
-    if (selectedConnection?.id === id) {
-      setSelectedConnection(null);
-    }
+    t.setData((prev) => ({ ...prev, connections: prev.connections.filter((conn) => conn.id !== id) }));
+    if (selectedConnection?.id === id) setSelectedConnection(null);
   };
 
-  // Función para actualizar proveedor o cliente
   const updateActor = (type, data) => {
-    setVsm(prev => ({
-      ...prev,
-      [type]: { ...prev[type], ...data }
-    }));
+    t.setData((prev) => ({ ...prev, [type]: { ...prev[type], ...data } }));
   };
 
-  // Función para exportar el mapa como imagen
+  const toggleViewMode = () => {
+    t.setData((prev) => ({ ...prev, viewMode: prev.viewMode === 'current' ? 'future' : 'current' }));
+  };
+
   const exportAsImage = async () => {
-    if (mapRef.current) {
-      try {
-        const canvas = await html2canvas(mapRef.current, {
-          backgroundColor: null,
-          scale: 2
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.href = imgData;
-        link.download = `vsm_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`;
-        link.click();
-      } catch (error) {
-        console.error('Error al exportar la imagen:', error);
-      }
+    if (!mapRef.current) return;
+    try {
+      const canvas = await html2canvas(mapRef.current, { backgroundColor: null, scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imgData;
+      const projectName = (t.project?.name || 'proyecto').replace(/\s+/g, '_');
+      link.download = `vsm_${projectName}_${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+    } catch (err) {
+      console.error('Error al exportar la imagen:', err);
     }
   };
 
-  // Función para cambiar entre estado actual y futuro
-  const toggleState = () => {
-    setVsm(prev => ({
-      ...prev,
-      currentState: !prev.currentState
-    }));
+  // --- Modo ejemplo ----------------------------------------------------------
+
+  const activateExample = () => {
+    preExampleSnapshotRef.current = t.data;
+    t.loadExample(0);
+    setExampleMode(true);
+    setSelectedProcess(null);
+    setSelectedConnection(null);
+    setEditMode(false);
   };
 
-  // Renderizado del proceso
-  const renderProcess = (process) => {
+  const handleViewExampleClick = () => {
+    if (t.isDirty) {
+      setConfirmLoadExample(true);
+      return;
+    }
+    activateExample();
+  };
+
+  const handleAdoptExample = () => {
+    t.save();
+    setExampleMode(false);
+  };
+
+  const handleUndoExample = () => {
+    if (preExampleSnapshotRef.current) t.setData(preExampleSnapshotRef.current);
+    setExampleMode(false);
+  };
+
+  const handleCancelClick = () => setConfirmDiscard(true);
+
+  // --- Renderizado -----------------------------------------------------------
+
+  if (!t.ready) return null;
+
+  const hasProcesses = (vsm.processes || []).length > 0;
+
+  const renderProcessNode = (process) => {
     const isSelected = selectedProcess?.id === process.id;
-    
     return (
       <motion.div
         key={process.id}
-        className={`absolute px-3 py-2 rounded-md border-2 ${isSelected ? 'border-blue-500' : 'border-gray-400'} bg-white shadow-md w-40`}
-        style={{ 
-          left: process.x, 
-          top: process.y,
-          cursor: editMode ? 'move' : 'pointer'
-        }}
+        className={`absolute w-40 rounded-md border-2 bg-surface px-3 py-2 shadow-md ${
+          isSelected ? 'border-brand' : 'border-line-strong'
+        }`}
+        style={{ left: process.x, top: process.y, cursor: effectiveEditMode ? 'move' : 'pointer' }}
         whileHover={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)' }}
         onClick={() => setSelectedProcess(process)}
-        drag={editMode}
+        drag={effectiveEditMode}
         dragMomentum={false}
         onDragEnd={(e, info) => {
-          updateProcess(process.id, {
-            x: process.x + info.offset.x,
-            y: process.y + info.offset.y
-          });
+          updateProcess(process.id, { x: process.x + info.offset.x, y: process.y + info.offset.y });
         }}
       >
-        <div className="font-semibold text-center border-b pb-1">{process.name}</div>
-        <div className="text-xs mt-1 grid grid-cols-2 gap-1">
-          <div>CT: {process.cycleTime} min</div>
-          <div>WT: {process.waitTime} min</div>
-          <div>Op: {process.operators}</div>
-          <div>Up: {process.uptime}%</div>
+        <div className="border-b border-line-subtle pb-1 text-center font-semibold text-content">{process.name}</div>
+        <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-content-secondary">
+          <div className="tabular-nums">CT: {formatNumber(process.cycleTime)} min</div>
+          <div className="tabular-nums">WT: {formatNumber(process.waitTime)} min</div>
+          <div className="tabular-nums">Op: {formatNumber(process.operators)}</div>
+          <div className="tabular-nums">Up: {formatNumber(process.uptime)}%</div>
         </div>
-        
-        {editMode && (
+
+        {effectiveEditMode && (
           <div className="absolute -right-2 -top-2 flex gap-1">
             {creatingConnection ? (
-              <button 
-                className="bg-green-500 text-white rounded-full p-1 text-xs"
+              <button
+                type="button"
+                className="rounded-full bg-success-soft p-1 text-success-on"
+                aria-label={`Conectar a ${process.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   completeConnection(process.id);
                 }}
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={14} aria-hidden="true" />
               </button>
             ) : (
-              <button 
-                className="bg-blue-500 text-white rounded-full p-1 text-xs"
+              <button
+                type="button"
+                className="rounded-full bg-brand p-1 text-brand-contrast"
+                aria-label={`Iniciar conexión desde ${process.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   startConnection(process.id);
                 }}
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={14} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -283,341 +414,259 @@ const ValueStreamMap = ({ projectId }) => {
     );
   };
 
-  // Renderizado de las conexiones
-  const renderConnections = () => {
-    return vsm.connections.map(conn => {
-      const source = vsm.processes.find(p => p.id === conn.source);
-      const target = vsm.processes.find(p => p.id === conn.target);
-      
+  const renderConnections = () =>
+    (vsm.connections || []).map((conn) => {
+      const source = vsm.processes.find((p) => p.id === conn.source);
+      const target = vsm.processes.find((p) => p.id === conn.target);
       if (!source || !target) return null;
-      
+
       const isSelected = selectedConnection?.id === conn.id;
-      
-      // Calcular puntos de inicio y fin
       const startX = source.x + 70;
       const startY = source.y + 40;
       const endX = target.x;
       const endY = target.y + 40;
-      
-      // Crear path para la flecha
       const path = `M${startX},${startY} L${endX},${endY}`;
-      
+      const strokeColor = isSelected ? 'rgb(var(--jc-brand))' : conn.type === 'information' ? 'rgb(var(--jc-content-muted))' : 'rgb(var(--jc-content-secondary))';
+
       return (
         <g key={conn.id} onClick={() => setSelectedConnection(conn)} className="cursor-pointer">
-          <path 
-            d={path} 
-            stroke={isSelected ? "blue" : (conn.type === "information" ? "#888" : "#333")} 
-            strokeWidth={isSelected ? 3 : 2} 
-            fill="none" 
-            strokeDasharray={conn.type === "information" ? "5,5" : "none"}
+          <path
+            d={path}
+            stroke={strokeColor}
+            strokeWidth={isSelected ? 3 : 2}
+            fill="none"
+            strokeDasharray={conn.type === 'information' ? '5,5' : 'none'}
           />
-          
-          {/* Flecha */}
-          <polygon 
-            points={`${endX},${endY} ${endX-10},${endY-5} ${endX-10},${endY+5}`} 
-            fill={isSelected ? "blue" : (conn.type === "information" ? "#888" : "#333")} 
-          />
-          
-          {/* Etiqueta de la conexión */}
-          <text 
-            x={(startX + endX) / 2} 
-            y={(startY + endY) / 2 - 10} 
-            fontSize="10" 
-            textAnchor="middle" 
-            fill={isSelected ? "blue" : "#666"}
-            className="bg-white px-1"
-          >
-            {conn.quantity > 0 ? `${conn.quantity} uds/${conn.frequency}` : ''}
+          <polygon points={`${endX},${endY} ${endX - 10},${endY - 5} ${endX - 10},${endY + 5}`} fill={strokeColor} />
+          <text x={(startX + endX) / 2} y={(startY + endY) / 2 - 10} fontSize="10" textAnchor="middle" fill={strokeColor}>
+            {conn.quantity > 0 ? `${formatNumber(conn.quantity)} uds/${conn.frequency}` : ''}
           </text>
-          
-          {/* Icono según tipo push/pull */}
           {conn.pushPull === 'pull' && (
-            <text 
-              x={(startX + endX) / 2} 
-              y={(startY + endY) / 2 + 15} 
-              fontSize="14" 
-              textAnchor="middle" 
-              fill="#006600"
-            >
+            <text x={(startX + endX) / 2} y={(startY + endY) / 2 + 15} fontSize="14" textAnchor="middle" fill="rgb(var(--jc-success))">
               ⟲
             </text>
           )}
         </g>
       );
     });
-  };
 
-  // Renderizado del proveedor y cliente
-  const renderEndpoints = () => {
-    return (
-      <>
-        {/* Proveedor */}
-        <motion.div
-          className="absolute px-3 py-2 rounded-md border-2 border-gray-400 bg-yellow-50 shadow-md w-40"
-          style={{ left: 50, top: 200 }}
-          whileHover={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)' }}
-          onClick={() => editMode && setSelectedProcess('supplier')}
-        >
-          <div className="font-semibold text-center border-b pb-1 flex items-center justify-center">
-            <Truck size={16} className="mr-1" />
-            {vsm.supplier.name}
-          </div>
-          <div className="text-xs mt-1">
-            {vsm.supplier.supplies}
-          </div>
-        </motion.div>
+  const renderEndpoints = () => (
+    <>
+      <motion.div
+        className="absolute w-40 rounded-md border-2 border-line-strong bg-warning-soft px-3 py-2 shadow-md"
+        style={{ left: 50, top: 200 }}
+        whileHover={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)' }}
+        onClick={() => effectiveEditMode && setSelectedProcess('supplier')}
+      >
+        <div className="flex items-center justify-center border-b border-line-subtle pb-1 text-center font-semibold text-content">
+          <Truck size={16} className="mr-1" aria-hidden="true" />
+          {vsm.supplier.name}
+        </div>
+        <div className="mt-1 text-xs text-content-secondary">{vsm.supplier.supplies}</div>
+      </motion.div>
 
-        {/* Cliente */}
-        <motion.div
-          className="absolute px-3 py-2 rounded-md border-2 border-gray-400 bg-green-50 shadow-md w-40"
-          style={{ left: Math.max(...vsm.processes.map(p => p.x), 200) + 200, top: 200 }}
-          whileHover={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)' }}
-          onClick={() => editMode && setSelectedProcess('customer')}
-        >
-          <div className="font-semibold text-center border-b pb-1 flex items-center justify-center">
-            <Package size={16} className="mr-1" />
-            {vsm.customer.name}
-          </div>
-          <div className="text-xs mt-1">
-            {vsm.customer.demands}
-          </div>
-        </motion.div>
-      </>
-    );
-  };
+      <motion.div
+        className="absolute w-40 rounded-md border-2 border-line-strong bg-success-soft px-3 py-2 shadow-md"
+        style={{ left: Math.max(...vsm.processes.map((p) => p.x), 200) + 200, top: 200 }}
+        whileHover={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)' }}
+        onClick={() => effectiveEditMode && setSelectedProcess('customer')}
+      >
+        <div className="flex items-center justify-center border-b border-line-subtle pb-1 text-center font-semibold text-content">
+          <Package size={16} className="mr-1" aria-hidden="true" />
+          {vsm.customer.name}
+        </div>
+        <div className="mt-1 text-xs text-content-secondary">{vsm.customer.demands}</div>
+      </motion.div>
+    </>
+  );
 
-  // Panel de propiedades para editar un proceso/conexión seleccionada
   const renderPropertiesPanel = () => {
-    if (!editMode) return null;
-    
+    if (!effectiveEditMode) return null;
+
     if (selectedProcess === 'supplier') {
       return (
-        <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-xs">
-          <h3 className="font-bold text-lg mb-3 flex items-center">
-            <Truck size={18} className="mr-2" />
+        <div className="w-full max-w-xs rounded-lg border border-line bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center text-lg font-bold text-content">
+            <Truck size={18} className="mr-2" aria-hidden="true" />
             Proveedor
           </h3>
-          
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Nombre</label>
-              <input
-                type="text"
-                className="w-full p-2 border rounded"
-                value={vsm.supplier.name}
-                onChange={(e) => updateActor('supplier', { name: e.target.value })}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Suministros</label>
+            <TextField label="Nombre" value={vsm.supplier.name} onChange={(v) => updateActor('supplier', { name: v })} />
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-content">Suministros</span>
               <textarea
-                className="w-full p-2 border rounded"
+                className="input"
+                rows={3}
                 value={vsm.supplier.supplies}
                 onChange={(e) => updateActor('supplier', { supplies: e.target.value })}
-                rows={3}
               />
-            </div>
+            </label>
           </div>
         </div>
       );
     }
-    
+
     if (selectedProcess === 'customer') {
       return (
-        <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-xs">
-          <h3 className="font-bold text-lg mb-3 flex items-center">
-            <Package size={18} className="mr-2" />
+        <div className="w-full max-w-xs rounded-lg border border-line bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center text-lg font-bold text-content">
+            <Package size={18} className="mr-2" aria-hidden="true" />
             Cliente
           </h3>
-          
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Nombre</label>
-              <input
-                type="text"
-                className="w-full p-2 border rounded"
-                value={vsm.customer.name}
-                onChange={(e) => updateActor('customer', { name: e.target.value })}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Demanda</label>
+            <TextField label="Nombre" value={vsm.customer.name} onChange={(v) => updateActor('customer', { name: v })} />
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-content">Demanda</span>
               <textarea
-                className="w-full p-2 border rounded"
+                className="input"
+                rows={3}
                 value={vsm.customer.demands}
                 onChange={(e) => updateActor('customer', { demands: e.target.value })}
-                rows={3}
               />
-            </div>
+            </label>
           </div>
         </div>
       );
     }
-    
+
     if (selectedProcess) {
       return (
-        <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-xs">
-          <h3 className="font-bold text-lg mb-3 flex items-center">
-            <GitBranch size={18} className="mr-2" />
+        <div className="w-full max-w-xs rounded-lg border border-line bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center text-lg font-bold text-content">
+            <GitBranch size={18} className="mr-2" aria-hidden="true" />
             Propiedades del Proceso
           </h3>
-          
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Nombre</label>
-              <input
-                type="text"
-                className="w-full p-2 border rounded"
-                value={selectedProcess.name}
-                onChange={(e) => updateProcess(selectedProcess.id, { name: e.target.value })}
-              />
-            </div>
-            
+            <TextField label="Nombre" value={selectedProcess.name} onChange={(v) => updateProcess(selectedProcess.id, { name: v })} />
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  <Clock size={14} className="inline mr-1" />
+              <label className="block">
+                <span className="mb-1 flex items-center text-sm font-medium text-content">
+                  <Clock size={14} className="mr-1" aria-hidden="true" />
                   Tiempo de Ciclo (min)
-                </label>
+                </span>
                 <input
                   type="number"
                   min="0"
                   step="0.1"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.cycleTime}
                   onChange={(e) => updateProcess(selectedProcess.id, { cycleTime: e.target.value })}
                 />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  <Clock size={14} className="inline mr-1" />
+              </label>
+              <label className="block">
+                <span className="mb-1 flex items-center text-sm font-medium text-content">
+                  <Clock size={14} className="mr-1" aria-hidden="true" />
                   Tiempo de Espera (min)
-                </label>
+                </span>
                 <input
                   type="number"
                   min="0"
                   step="0.1"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.waitTime}
                   onChange={(e) => updateProcess(selectedProcess.id, { waitTime: e.target.value })}
                 />
-              </div>
+              </label>
             </div>
-            
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium mb-1">Operadores</label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">Operadores</span>
                 <input
                   type="number"
                   min="0"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.operators}
                   onChange={(e) => updateProcess(selectedProcess.id, { operators: e.target.value })}
                 />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Disponibilidad (%)</label>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">Disponibilidad (%)</span>
                 <input
                   type="number"
                   min="0"
                   max="100"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.uptime}
                   onChange={(e) => updateProcess(selectedProcess.id, { uptime: e.target.value })}
                 />
-              </div>
+              </label>
             </div>
-            
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium mb-1">Inventario</label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">Inventario</span>
                 <input
                   type="number"
                   min="0"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.inventory}
                   onChange={(e) => updateProcess(selectedProcess.id, { inventory: e.target.value })}
                 />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">% Defectos</label>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">% Defectos</span>
                 <input
                   type="number"
                   min="0"
                   max="100"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedProcess.defectRate}
                   onChange={(e) => updateProcess(selectedProcess.id, { defectRate: e.target.value })}
                 />
-              </div>
+              </label>
             </div>
-            
-            <button
-              onClick={() => deleteProcess(selectedProcess.id)}
-              className="mt-2 w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded flex items-center justify-center"
-            >
-              <Trash2 size={16} className="mr-1" />
+            <GradientButton variant="danger" size="sm" fullWidth leadingIcon={<Trash2 size={16} />} onClick={() => deleteProcess(selectedProcess.id)}>
               Eliminar Proceso
-            </button>
+            </GradientButton>
           </div>
         </div>
       );
     }
-    
+
     if (selectedConnection) {
       return (
-        <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-xs">
-          <h3 className="font-bold text-lg mb-3 flex items-center">
-            <ArrowRight size={18} className="mr-2" />
+        <div className="w-full max-w-xs rounded-lg border border-line bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center text-lg font-bold text-content">
+            <ArrowRight size={18} className="mr-2" aria-hidden="true" />
             Propiedades de la Conexión
           </h3>
-          
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Tipo</label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-content">Tipo</span>
               <select
-                className="w-full p-2 border rounded"
+                className="input"
                 value={selectedConnection.type}
                 onChange={(e) => updateConnection(selectedConnection.id, { type: e.target.value })}
               >
                 <option value="material">Material</option>
                 <option value="information">Información</option>
               </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Método</label>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-content">Método</span>
               <select
-                className="w-full p-2 border rounded"
+                className="input"
                 value={selectedConnection.pushPull}
                 onChange={(e) => updateConnection(selectedConnection.id, { pushPull: e.target.value })}
               >
                 <option value="push">Push (Empujar)</option>
                 <option value="pull">Pull (Jalar)</option>
               </select>
-            </div>
-            
+            </label>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium mb-1">Cantidad</label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">Cantidad</span>
                 <input
                   type="number"
                   min="0"
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedConnection.quantity}
                   onChange={(e) => updateConnection(selectedConnection.id, { quantity: e.target.value })}
                 />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Frecuencia</label>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-content">Frecuencia</span>
                 <select
-                  className="w-full p-2 border rounded"
+                  className="input"
                   value={selectedConnection.frequency}
                   onChange={(e) => updateConnection(selectedConnection.id, { frequency: e.target.value })}
                 >
@@ -626,211 +675,439 @@ const ValueStreamMap = ({ projectId }) => {
                   <option value="semanal">Semanal</option>
                   <option value="mensual">Mensual</option>
                 </select>
-              </div>
+              </label>
             </div>
-            
-            <button
-              onClick={() => deleteConnection(selectedConnection.id)}
-              className="mt-2 w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded flex items-center justify-center"
-            >
-              <Trash2 size={16} className="mr-1" />
+            <GradientButton variant="danger" size="sm" fullWidth leadingIcon={<Trash2 size={16} />} onClick={() => deleteConnection(selectedConnection.id)}>
               Eliminar Conexión
-            </button>
+            </GradientButton>
           </div>
         </div>
       );
     }
-    
+
     return (
-      <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-xs">
-        <p className="text-gray-500">Selecciona un elemento para editar sus propiedades.</p>
-        
-        <button
-          onClick={addProcess}
-          className="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded flex items-center justify-center"
-        >
-          <Plus size={16} className="mr-1" />
+      <div className="w-full max-w-xs rounded-lg border border-line bg-surface p-4 shadow-sm">
+        <p className="text-sm text-content-secondary">Selecciona un elemento para editar sus propiedades.</p>
+        <GradientButton size="sm" fullWidth className="mt-3" leadingIcon={<Plus size={16} />} onClick={addProcess}>
           Añadir Proceso
-        </button>
+        </GradientButton>
       </div>
     );
   };
 
-  // Panel de ayuda
-  const renderHelpPanel = () => {
-    if (!showHelp) return null;
-    
-    return (
-      <div className="absolute top-20 right-4 bg-white p-4 rounded-lg shadow-lg w-80 z-50">
-        <h3 className="font-bold text-lg mb-2 flex items-center">
-          <HelpCircle size={18} className="mr-2" />
-          Ayuda del VSM
-        </h3>
-        
-        <div className="space-y-2 text-sm">
-          <p><strong>Modo Edición:</strong> Activa/desactiva con el botón Editar.</p>
-          <p><strong>Añadir Proceso:</strong> Botón '+' en panel de propiedades.</p>
-          <p><strong>Conectar Procesos:</strong> Haz clic en el botón de flecha azul y luego en el proceso destino.</p>
-          <p><strong>Editar Elementos:</strong> Haz clic en cualquier elemento para modificar sus propiedades.</p>
-          <p><strong>Mover Procesos:</strong> Arrastra los procesos en modo edición.</p>
-          <p><strong>Guardar Cambios:</strong> Desactiva el modo edición o usa el botón Guardar.</p>
-        </div>
-        
-        <button 
-          className="mt-3 w-full bg-gray-200 hover:bg-gray-300 py-1 px-2 rounded"
-          onClick={() => setShowHelp(false)}
-        >
-          Cerrar
-        </button>
-      </div>
-    );
-  };
-
-  // Renderizar métricas
-  const renderMetrics = () => {
-    return (
-      <div className="bg-gray-100 p-3 rounded-md shadow-sm mb-4">
-        <h3 className="font-semibold text-lg mb-2 flex items-center">
-          <Clipboard size={18} className="mr-2" />
-          Métricas del Proceso
-        </h3>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white p-2 rounded shadow-sm">
-            <div className="text-sm text-gray-600">Lead Time Total</div>
-            <div className="font-bold text-lg flex items-center">
-              <Clock size={16} className="mr-1 text-blue-500" />
-              {vsm.metrics.leadTime.toFixed(1)} min
-            </div>
-          </div>
-          
-          <div className="bg-white p-2 rounded shadow-sm">
-            <div className="text-sm text-gray-600">Tiempo de Proceso</div>
-            <div className="font-bold text-lg flex items-center">
-              <Zap size={16} className="mr-1 text-green-500" />
-              {vsm.metrics.processTime.toFixed(1)} min
-            </div>
-          </div>
-          
-          <div className="bg-white p-2 rounded shadow-sm">
-            <div className="text-sm text-gray-600">Tiempo de Espera</div>
-            <div className="font-bold text-lg flex items-center">
-              <Clock size={16} className="mr-1 text-red-500" />
-              {vsm.metrics.waitingTime.toFixed(1)} min
-            </div>
-          </div>
-          
-          <div className="bg-white p-2 rounded shadow-sm">
-            <div className="text-sm text-gray-600">Ratio Valor Añadido</div>
-            <div className="font-bold text-lg flex items-center">
-              {vsm.metrics.valueAddedRatio > 30 ? (
-                <TrendingUp size={16} className="mr-1 text-green-500" />
-              ) : (
-                <TrendingDown size={16} className="mr-1 text-red-500" />
+  const renderTableView = () => (
+    <div className="overflow-x-auto rounded-lg border border-line">
+      <table className="min-w-full divide-y divide-line text-sm">
+        <thead className="bg-surface-sunken">
+          <tr>
+            <th scope="col" className="px-3 py-2 text-left font-medium text-content-secondary">Proceso</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Tiempo de ciclo (min)</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Tiempo de espera (min)</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Operadores</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Disponibilidad</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Inventario</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">% Defectos</th>
+            {effectiveEditMode && <th scope="col" className="px-3 py-2 text-right font-medium text-content-secondary">Acciones</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line-subtle bg-surface">
+          {vsm.processes.map((process) => (
+            <tr key={process.id}>
+              <td className="px-3 py-2 text-content">
+                {effectiveEditMode ? (
+                  <input
+                    type="text"
+                    className="input"
+                    value={process.name}
+                    onChange={(e) => updateProcess(process.id, { name: e.target.value })}
+                  />
+                ) : (
+                  process.name
+                )}
+              </td>
+              {['cycleTime', 'waitTime', 'operators', 'uptime', 'inventory', 'defectRate'].map((field) => (
+                <td key={field} className="px-3 py-2 text-right tabular-nums text-content">
+                  {effectiveEditMode ? (
+                    <input
+                      type="number"
+                      min="0"
+                      className="input text-right"
+                      value={process[field]}
+                      onChange={(e) => updateProcess(process.id, { [field]: e.target.value })}
+                    />
+                  ) : (
+                    formatNumber(process[field])
+                  )}
+                </td>
+              ))}
+              {effectiveEditMode && (
+                <td className="px-3 py-2 text-right">
+                  <button
+                    type="button"
+                    aria-label={`Eliminar ${process.name}`}
+                    className="rounded-md p-1.5 text-content-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger-on"
+                    onClick={() => deleteProcess(process.id)}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
+                </td>
               )}
-              {vsm.metrics.valueAddedRatio.toFixed(1)}%
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-4 h-full">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold flex items-center">
-          <GitBranch className="mr-2" />
-          {vsm.currentState ? 'Mapa de Flujo de Valor - Estado Actual' : 'Mapa de Flujo de Valor - Estado Futuro'}
-        </h2>
-        
-        <div className="flex gap-2">
-          <button
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-            onClick={() => setShowHelp(!showHelp)}
-            title="Ayuda"
-          >
-            <HelpCircle size={20} />
-          </button>
-          
-          <button
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-            onClick={toggleState}
-            title="Cambiar entre estado actual y futuro"
-          >
-            <RotateCcw size={20} />
-          </button>
-          
-          <button
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-            onClick={exportAsImage}
-            title="Exportar como imagen"
-          >
-            <Download size={20} />
-          </button>
-          
-          <button
-            className={`p-2 rounded ${editMode ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
-            onClick={() => setEditMode(!editMode)}
-          >
-            {editMode ? (
-              <>
-                <Save size={18} className="mr-1 inline" />
-                <span>Guardar</span>
-              </>
-            ) : (
-              <>
-                <Edit size={18} className="mr-1 inline" />
-                <span>Editar</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-      
-      {renderHelpPanel()}
-      
-      {renderMetrics()}
-
-      <div className="flex h-[calc(100vh-300px)] relative">
-        <div className={`flex-grow overflow-auto border border-gray-200 rounded-lg relative ${editMode ? 'bg-gray-50' : 'bg-white'}`}>
-          {/* Indicador cuando estamos en modo de conexión */}
-          {creatingConnection && (
-            <div className="absolute top-2 left-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm border border-yellow-300 flex items-center z-10">
-              <AlertTriangle size={14} className="mr-1" />
-              Selecciona un proceso destino para la conexión
-            </div>
-          )}
-          
-          <div 
-            className="relative w-full h-full min-h-[500px]"
-            ref={mapRef}
-            onClick={() => {
-              if (creatingConnection) {
-                setCreatingConnection(false);
-                setConnectionStart(null);
-              } else {
-                setSelectedProcess(null);
-                setSelectedConnection(null);
-              }
-            }}
-          >
-            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
-              {renderConnections()}
-            </svg>
-            
-            {renderEndpoints()}
-            
-            {vsm.processes.map(process => renderProcess(process))}
-          </div>
-        </div>
-        
-        {editMode && (
-          <div className="w-64 ml-4 overflow-y-auto">
-            {renderPropertiesPanel()}
+  const renderDiagramView = () => (
+    <div className="flex gap-4">
+      <div className="relative flex-grow overflow-auto rounded-lg border border-line bg-surface-sunken" style={{ height: 520 }}>
+        {creatingConnection && (
+          <div className="absolute left-2 top-2 z-10 flex items-center rounded-full border border-warning/40 bg-warning-soft px-3 py-1 text-sm text-warning-on">
+            <AlertTriangle size={14} className="mr-1" aria-hidden="true" />
+            Selecciona un proceso destino para la conexión
           </div>
         )}
+
+        <div
+          className="relative h-full min-h-[500px] w-full"
+          ref={mapRef}
+          onClick={() => {
+            if (creatingConnection) {
+              setCreatingConnection(false);
+              setConnectionStart(null);
+            } else {
+              setSelectedProcess(null);
+              setSelectedConnection(null);
+            }
+          }}
+        >
+          <svg className="pointer-events-none absolute left-0 top-0 h-full w-full">{renderConnections()}</svg>
+          {renderEndpoints()}
+          {vsm.processes.map((process) => renderProcessNode(process))}
+        </div>
       </div>
+
+      {effectiveEditMode && <div className="w-64 shrink-0 overflow-y-auto">{renderPropertiesPanel()}</div>}
+    </div>
+  );
+
+  return (
+    <div className="p-4 sm:p-6">
+      {/* Barra de guardado */}
+      <div className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+        <SaveStatus
+          isDirty={t.isDirty}
+          isSaving={t.isSaving}
+          justSaved={t.justSaved}
+          lastSavedAt={t.lastSavedAt}
+          error={t.error}
+          onRetry={() => t.save()}
+        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          {t.hasExamples && !exampleMode && (
+            <GradientButton variant="outline" size="sm" onClick={handleViewExampleClick}>
+              Ver un ejemplo
+            </GradientButton>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowHelp((v) => !v)}
+            aria-label="Ayuda del mapa de flujo de valor"
+            className="rounded-lg border border-line bg-surface p-2 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken"
+          >
+            <HelpCircle size={16} aria-hidden="true" />
+          </button>
+
+          {hasProcesses && (
+            <GradientButton variant="outline" size="sm" leadingIcon={<Download size={14} />} onClick={exportAsImage}>
+              Exportar PNG
+            </GradientButton>
+          )}
+
+          {!exampleMode && t.isDirty && (
+            <GradientButton variant="ghost" size="sm" onClick={handleCancelClick}>
+              Cancelar
+            </GradientButton>
+          )}
+
+          {!exampleMode && (
+            <GradientButton
+              variant="success"
+              size="sm"
+              disabled={!t.isDirty || t.isSaving}
+              loading={t.isSaving}
+              leadingIcon={<Save size={14} />}
+              onClick={() => t.save()}
+            >
+              Guardar
+            </GradientButton>
+          )}
+        </div>
+      </div>
+
+      {/* Banner de modo ejemplo */}
+      {exampleMode && (
+        <motion.div
+          initial={shouldReduceMotion ? false : fadeInUp.hidden}
+          animate={fadeInUp.visible}
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/40 bg-info-soft px-4 py-3 ring-1 ring-info/20"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="badge bg-info text-white">Ejemplo</span>
+            <span className="text-sm font-medium text-info-on">{t.exampleTitles[0]}</span>
+          </div>
+          <p className="text-sm text-info-on">Estás viendo un ejemplo. No se ha guardado nada en tu proyecto.</p>
+          <div className="flex gap-2">
+            <GradientButton size="sm" onClick={handleAdoptExample}>
+              Usar como punto de partida
+            </GradientButton>
+            <GradientButton size="sm" variant="outline" onClick={handleUndoExample}>
+              Deshacer
+            </GradientButton>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Panel de ayuda */}
+      {showHelp && (
+        <div className="mb-6 rounded-lg border border-line bg-surface p-4 shadow-sm">
+          <h3 className="mb-2 flex items-center text-lg font-bold text-content">
+            <HelpCircle size={18} className="mr-2" aria-hidden="true" />
+            Ayuda del VSM
+          </h3>
+          <div className="space-y-2 text-sm text-content-secondary">
+            <p><strong className="text-content">Editar diagrama:</strong> activa el modo edición con el botón correspondiente.</p>
+            <p><strong className="text-content">Añadir Proceso:</strong> botón «+» en el panel de propiedades.</p>
+            <p><strong className="text-content">Conectar Procesos:</strong> haz clic en el botón de flecha y luego en el proceso destino.</p>
+            <p><strong className="text-content">Editar Elementos:</strong> haz clic en cualquier elemento para modificar sus propiedades.</p>
+            <p><strong className="text-content">Mover Procesos:</strong> arrastra los procesos en modo edición.</p>
+            <p><strong className="text-content">Guardar Cambios:</strong> usa el botón Guardar de la barra superior.</p>
+          </div>
+          <GradientButton variant="ghost" size="sm" className="mt-3" onClick={() => setShowHelp(false)}>
+            Cerrar
+          </GradientButton>
+        </div>
+      )}
+
+      {/* Resumen ejecutivo: estado actual / estado futuro */}
+      <section className="mb-6 grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-line bg-surface p-4">
+          <h3 className="flex items-center text-sm font-semibold text-content">
+            <Clipboard size={16} className="mr-2" aria-hidden="true" />
+            Estado actual — resumen
+          </h3>
+          <div className="mt-3 space-y-3">
+            <TextField
+              label="Lead time total"
+              placeholder="p. ej. 45 días"
+              value={vsm.currentState.totalLeadTime}
+              onChange={(v) => t.patch({ currentState: { ...vsm.currentState, totalLeadTime: v } })}
+            />
+            <TextField
+              label="Tiempo de valor añadido"
+              placeholder="p. ej. 12 horas"
+              value={vsm.currentState.valueAddedTime}
+              onChange={(v) => t.patch({ currentState: { ...vsm.currentState, valueAddedTime: v } })}
+            />
+            <EditableList
+              label="Principales desperdicios"
+              addLabel="Agregar desperdicio"
+              placeholder="Describe el desperdicio identificado"
+              items={vsm.currentState.mainWastes}
+              onChange={(next) => t.patch({ currentState: { ...vsm.currentState, mainWastes: next } })}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-line bg-surface p-4">
+          <h3 className="flex items-center text-sm font-semibold text-content">
+            <TrendingUp size={16} className="mr-2" aria-hidden="true" />
+            Estado futuro — resumen
+          </h3>
+          <div className="mt-3 space-y-3">
+            <TextField
+              label="Lead time objetivo"
+              placeholder="p. ej. 30 días"
+              value={vsm.futureState.targetLeadTime}
+              onChange={(v) => t.patch({ futureState: { ...vsm.futureState, targetLeadTime: v } })}
+            />
+            <EditableList
+              label="Mejoras propuestas"
+              addLabel="Agregar mejora"
+              placeholder="Describe la mejora propuesta"
+              items={vsm.futureState.improvements}
+              onChange={(next) => t.patch({ futureState: { ...vsm.futureState, improvements: next } })}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Métricas calculadas del diagrama */}
+      {hasProcesses && (
+        <section className="mb-6 rounded-lg border border-line bg-surface-sunken p-3">
+          <h3 className="mb-2 flex items-center text-sm font-semibold text-content">
+            <Zap size={16} className="mr-2" aria-hidden="true" />
+            Métricas calculadas del diagrama
+          </h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-md border border-line bg-surface p-2 shadow-xs">
+              <div className="text-sm text-content-secondary">Lead Time Total</div>
+              <div className="flex items-center text-lg font-bold tabular-nums text-content">
+                <Clock size={16} className="mr-1 text-info-on" aria-hidden="true" />
+                {formatNumber(metrics.leadTime, { maximumFractionDigits: 1 })} min
+              </div>
+            </div>
+            <div className="rounded-md border border-line bg-surface p-2 shadow-xs">
+              <div className="text-sm text-content-secondary">Tiempo de Proceso</div>
+              <div className="flex items-center text-lg font-bold tabular-nums text-content">
+                <Zap size={16} className="mr-1 text-success-on" aria-hidden="true" />
+                {formatNumber(metrics.processTime, { maximumFractionDigits: 1 })} min
+              </div>
+            </div>
+            <div className="rounded-md border border-line bg-surface p-2 shadow-xs">
+              <div className="text-sm text-content-secondary">Tiempo de Espera</div>
+              <div className="flex items-center text-lg font-bold tabular-nums text-content">
+                <Clock size={16} className="mr-1 text-danger-on" aria-hidden="true" />
+                {formatNumber(metrics.waitingTime, { maximumFractionDigits: 1 })} min
+              </div>
+            </div>
+            <div className="rounded-md border border-line bg-surface p-2 shadow-xs">
+              <div className="text-sm text-content-secondary">Ratio Valor Añadido</div>
+              <div className="flex items-center text-lg font-bold tabular-nums text-content">
+                {metrics.valueAddedRatio > 30 ? (
+                  <TrendingUp size={16} className="mr-1 text-success-on" aria-hidden="true" />
+                ) : (
+                  <TrendingDown size={16} className="mr-1 text-danger-on" aria-hidden="true" />
+                )}
+                {formatPercent(metrics.valueAddedRatio, 1)}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Diagrama interactivo */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-content-secondary">
+          <GitBranch size={16} aria-hidden="true" />
+          <span>Diagrama — estado {vsm.viewMode === 'current' ? 'actual' : 'futuro'}</span>
+          <button
+            type="button"
+            onClick={toggleViewMode}
+            aria-label="Cambiar entre estado actual y estado futuro"
+            className="rounded-md p-1 text-content-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-content"
+          >
+            <RotateCcw size={14} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {hasProcesses && (
+            <div className="inline-flex rounded-md border border-line p-0.5">
+              <button
+                type="button"
+                aria-pressed={displayFormat === 'diagram'}
+                aria-label="Vista de diagrama"
+                onClick={() => setDisplayFormat('diagram')}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors duration-fast ${
+                  displayFormat === 'diagram' ? 'bg-brand text-brand-contrast' : 'text-content-secondary hover:bg-surface-sunken'
+                }`}
+              >
+                <LayoutGrid size={14} className="inline" aria-hidden="true" /> Diagrama
+              </button>
+              <button
+                type="button"
+                aria-pressed={displayFormat === 'table'}
+                aria-label="Vista de tabla"
+                onClick={() => setDisplayFormat('table')}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors duration-fast ${
+                  displayFormat === 'table' ? 'bg-brand text-brand-contrast' : 'text-content-secondary hover:bg-surface-sunken'
+                }`}
+              >
+                <TableIcon size={14} className="inline" aria-hidden="true" /> Tabla
+              </button>
+            </div>
+          )}
+
+          {!exampleMode && (
+            <GradientButton
+              variant={editMode ? 'success' : 'outline'}
+              size="sm"
+              leadingIcon={editMode ? <Eye size={14} /> : <Edit size={14} />}
+              onClick={() => setEditMode((v) => !v)}
+            >
+              {editMode ? 'Vista previa' : 'Editar diagrama'}
+            </GradientButton>
+          )}
+        </div>
+      </div>
+
+      {!hasProcesses ? (
+        <EmptyState
+          title="Ver el flujo es ver el desperdicio"
+          description="Dibuja las etapas del proceso con sus tiempos de ciclo y espera para conocer tu lead time real."
+          action={!exampleMode ? <GradientButton onClick={addProcess}>Agregar primera etapa</GradientButton> : undefined}
+          secondaryAction={
+            !exampleMode && t.hasExamples ? (
+              <GradientButton variant="outline" onClick={handleViewExampleClick}>
+                Ver un ejemplo
+              </GradientButton>
+            ) : undefined
+          }
+        />
+      ) : displayFormat === 'table' ? (
+        renderTableView()
+      ) : (
+        renderDiagramView()
+      )}
+
+      {/* Confirmaciones */}
+      <Modal
+        open={confirmLoadExample}
+        onClose={() => setConfirmLoadExample(false)}
+        title="¿Cargar el ejemplo?"
+        description="Cargar el ejemplo reemplazará lo que hay en pantalla. Tus datos guardados no se tocan hasta que pulses Guardar."
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmLoadExample(false)}>
+              Cancelar
+            </GradientButton>
+            <GradientButton
+              onClick={() => {
+                setConfirmLoadExample(false);
+                activateExample();
+              }}
+            >
+              Ver el ejemplo
+            </GradientButton>
+          </>
+        }
+      />
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="¿Descartar los cambios sin guardar?"
+        footer={
+          <>
+            <GradientButton variant="outline" onClick={() => setConfirmDiscard(false)}>
+              Seguir editando
+            </GradientButton>
+            <GradientButton
+              variant="danger"
+              onClick={() => {
+                t.discard();
+                setConfirmDiscard(false);
+              }}
+            >
+              Descartar
+            </GradientButton>
+          </>
+        }
+      />
     </div>
   );
 };

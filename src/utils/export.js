@@ -127,11 +127,11 @@ export const validateImportedData = (data, validationSchema) => {
   try {
     // Implementación básica, podría mejorarse con una biblioteca de validación
     for (const key in validationSchema) {
-      if (validationSchema.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(validationSchema, key)) {
         const requiredType = validationSchema[key];
-        
+
         // Verificar si la propiedad existe
-        if (!data.hasOwnProperty(key)) {
+        if (!Object.prototype.hasOwnProperty.call(data, key)) {
           console.error(`Propiedad requerida '${key}' no encontrada`);
           return false;
         }
