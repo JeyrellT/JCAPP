@@ -1,807 +1,2084 @@
 // Datos iniciales de proyectos Lean Six Sigma
 const projects = [
   {
-    id: 'project-1',
-    name: 'Diagnóstico de Cobranza e Inventario FGV S.A.',
-    description: 'Aplicación de Lean Six Sigma para diagnóstico de procesos de cobranza e inventario con énfasis en reducción de tiempos de ciclo y aumento de la eficiencia operativa.',
-    status: 'active',
-    progress: 54,
-    startDate: '2026-02-16',
-    endDate: '2026-08-07',
-    company: 'Ferreteros Globales Versátiles S.A.',
-    phase: 'Improve',
-    team: [
-      { id: 'team-1', name: 'Carlos Montero', role: 'Patrocinador', position: 'Gerente de Operaciones', email: 'cmontero@fgv.com' },
-      { id: 'team-2', name: 'María Ramírez', role: 'Líder del Proyecto', position: 'Especialista Lean Six Sigma', email: 'mramirez@fgv.com' },
-      { id: 'team-3', name: 'Juan Pérez', role: 'Miembro', position: 'Analista de Procesos', email: 'jperez@fgv.com' },
-      { id: 'team-4', name: 'Laura González', role: 'Miembro', position: 'Supervisora de Almacén', email: 'lgonzalez@fgv.com' }
+    "id": "project-1",
+    "name": "Diagnóstico de Cobranza e Inventario FGV S.A.",
+    "description": "Aplicación de Lean Six Sigma para diagnóstico de procesos de cobranza e inventario con énfasis en reducción de tiempos de ciclo y aumento de la eficiencia operativa.",
+    "status": "active",
+    "progress": 54,
+    "startDate": "2026-02-16",
+    "endDate": "2026-08-07",
+    "company": "Ferreteros Globales Versátiles S.A.",
+    "phase": "Improve",
+    "team": [
+      {
+        "id": "team-1",
+        "name": "Carlos Montero",
+        "role": "Patrocinador",
+        "position": "Gerente de Operaciones",
+        "email": "cmontero@fgv.com"
+      },
+      {
+        "id": "team-2",
+        "name": "María Ramírez",
+        "role": "Líder del Proyecto",
+        "position": "Especialista Lean Six Sigma",
+        "email": "mramirez@fgv.com"
+      },
+      {
+        "id": "team-3",
+        "name": "Juan Pérez",
+        "role": "Miembro",
+        "position": "Analista de Procesos",
+        "email": "jperez@fgv.com"
+      },
+      {
+        "id": "team-4",
+        "name": "Laura González",
+        "role": "Miembro",
+        "position": "Supervisora de Almacén",
+        "email": "lgonzalez@fgv.com"
+      }
     ],
-    kpis: [
-      { id: 'kpi-1', name: 'Tiempo de Ciclo de Cobranza', baseLine: '45 días', target: '30 días', current: '32 días' },
-      { id: 'kpi-2', name: 'Exactitud de Inventario', baseLine: '87%', target: '98%', current: '95%' },
-      { id: 'kpi-3', name: 'Cuentas por Cobrar Vencidas', baseLine: '23%', target: '10%', current: '14%' }
+    "kpis": [
+      {
+        "id": "kpi-1",
+        "name": "Tiempo de Ciclo de Cobranza",
+        "baseLine": "45 días",
+        "target": "30 días",
+        "current": "32 días"
+      },
+      {
+        "id": "kpi-2",
+        "name": "Exactitud de Inventario",
+        "baseLine": "87%",
+        "target": "98%",
+        "current": "95%"
+      },
+      {
+        "id": "kpi-3",
+        "name": "Cuentas por Cobrar Vencidas",
+        "baseLine": "23%",
+        "target": "10%",
+        "current": "14%"
+      }
     ],
-    tools: {
-      'project-charter': {
-        status: 'completed',
-        updatedAt: '2026-02-21T10:30:00Z',
-        notes: 'Proyecto charter finalizado y aprobado por el patrocinador',
-        data: {
-          businessCase: 'La empresa enfrenta problemas recurrentes en la gestión de cobranza e inventarios que afectan el flujo de caja y la satisfacción del cliente. Se estima que las ineficiencias actuales generan costos adicionales de aproximadamente ₡12.5 millones al año.',
-          problemStatement: 'Actualmente el ciclo de cobranza toma 45 días en promedio y la exactitud del inventario es del 87%, lo que genera problemas de flujo de caja y servicio al cliente.',
-          scope: 'Incluye los procesos de cobranza desde facturación hasta recepción del pago y los procesos de gestión de inventario en el almacén principal. No incluye logística externa ni procesos de compras internacionales.',
-          goals: 'Reducir el tiempo de ciclo de cobranza a 30 días o menos y aumentar la exactitud del inventario a un mínimo de 98%.'
+    "tools": {
+      "project-charter": {
+        "status": "completed",
+        "updatedAt": "2026-02-21T10:30:00Z",
+        "notes": "Proyecto charter finalizado y aprobado por el patrocinador",
+        "data": {
+          "businessCase": "La empresa enfrenta problemas recurrentes en la gestión de cobranza e inventarios que afectan el flujo de caja y la satisfacción del cliente. Se estima que las ineficiencias actuales generan costos adicionales de aproximadamente ₡12.5 millones al año.",
+          "problemStatement": "Actualmente el ciclo de cobranza toma 45 días en promedio y la exactitud del inventario es del 87%, lo que genera problemas de flujo de caja y servicio al cliente.",
+          "scope": "Incluye los procesos de cobranza desde facturación hasta recepción del pago y los procesos de gestión de inventario en el almacén principal. No incluye logística externa ni procesos de compras internacionales.",
+          "goals": "Reducir el tiempo de ciclo de cobranza a 30 días o menos y aumentar la exactitud del inventario a un mínimo de 98%."
         }
       },
-      'sipoc': {
-        status: 'completed',
-        updatedAt: '2026-02-26T14:45:00Z',
-        notes: 'SIPOCs completados para todos los procesos críticos',
-        data: {
-          processName: 'Gestión de Cobranza',
-          suppliers: ['Departamento de Ventas', 'Departamento Contable', 'Clientes'],
-          inputs: ['Facturas', 'Políticas de crédito', 'Información de clientes'],
-          process: ['Emitir factura', 'Registrar en sistema', 'Enviar recordatorios', 'Recibir pagos', 'Actualizar cuentas'],
-          outputs: ['Cobros realizados', 'Reportes de morosidad', 'Flujo de caja actualizado'],
-          customers: ['Departamento Financiero', 'Gerencia General', 'Departamento de Ventas']
-        }
-      },
-      'voc': {
-        status: 'completed',
-        updatedAt: '2026-03-14T09:15:00Z',
-        notes: 'Análisis VOC completado con todos los grupos de stakeholders',
-        data: {
-          customers: [
-            { type: 'Interno', comment: 'Necesitamos información precisa sobre el inventario disponible para prometer fechas de entrega realistas a los clientes', importance: 5 },
-            { type: 'Externo', comment: 'Las inconsistencias entre lo facturado y lo entregado generan problemas en nuestra contabilidad', importance: 4 },
-            { type: 'Interno', comment: 'Los retrasos en cobranza afectan nuestro flujo de caja y capacidad de inversión', importance: 5 }
-          ]
-        }
-      },
-      'ctq': {
-        status: 'completed',
-        updatedAt: '2026-04-01T16:20:00Z',
-        notes: 'Indicadores CTQ definidos y validados con stakeholders',
-        data: {
-          requirements: [
-            { need: 'Información de inventario precisa', driver: 'Exactitud', measure: 'Porcentaje de coincidencia entre sistema y conteo físico', target: '≥ 98%' },
-            { need: 'Cobros oportunos', driver: 'Tiempo', measure: 'Días promedio de ciclo de cobranza', target: '≤ 30 días' },
-            { need: 'Reducción de cuentas vencidas', driver: 'Porcentaje', measure: 'Porcentaje de cuentas por cobrar con más de 30 días', target: '≤ 10%' }
-          ]
-        }
-      },
-      'value-stream-map': {
-        status: 'in_progress',
-        updatedAt: '2026-05-15T11:00:00Z',
-        notes: 'VSM en proceso de validación final',
-        data: {
-          currentState: {
-            totalLeadTime: '45 días',
-            valueAddedTime: '12 horas',
-            mainWastes: ['Esperas entre departamentos', 'Reprocesos por errores de facturación', 'Movimientos innecesarios de documentación']
-          },
-          futureState: {
-            targetLeadTime: '30 días',
-            improvements: ['Automatización de recordatorios', 'Procesamiento paralelo de documentación', 'Eliminación de aprobaciones redundantes']
-          }
-        }
-      },
-      'stakeholder-analysis': {
-        status: 'completed',
-        updatedAt: '2026-03-09T15:30:00Z',
-        notes: 'Análisis de stakeholders finalizado',
-        data: {
-          stakeholders: [
-            { name: 'Gerencia General', interest: 'alto', influence: 'alto', concerns: 'ROI del proyecto, mejora en flujo de caja', strategy: 'Comunicar avances semanales, mostrar impacto financiero' },
-            { name: 'Personal de Almacén', interest: 'medio', influence: 'alto', concerns: 'Cambios en procesos diarios, posible aumento de carga laboral', strategy: 'Involucrar en diseño de soluciones, capacitación' },
-            { name: 'Clientes Principales', interest: 'bajo', influence: 'alto', concerns: 'Cambios en procesos de facturación y cobro', strategy: 'Comunicar cambios con anticipación, destacar beneficios' }
-          ]
-        }
-      },
-      'cause-effect-diagram': {
-        status: 'completed',
-        updatedAt: '2026-03-19T13:25:00Z',
-        notes: 'Diagrama de Ishikawa completado para problemas de cobranza e inventario',
-        data: {
-          problem: 'Ciclo de cobranza extendido',
-          categories: [
-            { name: 'Personal', causes: ['Falta de capacitación en seguimiento', 'Rotación alta en el departamento', 'No hay incentivos por cobros oportunos'] },
-            { name: 'Métodos', causes: ['Proceso manual de seguimiento', 'Política de cobro poco clara', 'Falta de escalamiento para casos críticos'] },
-            { name: 'Sistemas', causes: ['Software desactualizado', 'Falta de alertas automáticas', 'Reportes poco claros para seguimiento'] },
-            { name: 'Entorno', causes: ['Cultura de pago tardío en el mercado', 'Problemas económicos de clientes', 'Competencia con términos más flexibles'] }
-          ]
-        }
-      },
-      'prioritization-matrix': {
-        status: 'in_progress',
-        updatedAt: '2026-06-10T13:45:00Z',
-        notes: 'Matriz de priorización en desarrollo',
-        data: {
-          criteria: ['Impacto en flujo de caja', 'Facilidad de implementación', 'Costo', 'Tiempo requerido'],
-          initiatives: [
-            { name: 'Automatización de recordatorios de pago', scores: [5, 4, 3, 4], total: 16 },
-            { name: 'Rediseño de políticas de crédito', scores: [5, 2, 5, 2], total: 14 },
-            { name: 'Implementación de sistema de códigos de barras en inventario', scores: [3, 3, 2, 3], total: 11 }
-          ]
-        }
-      },
-      'roi-calculator': {
-        status: 'in_progress',
-        updatedAt: '2026-06-15T09:30:00Z',
-        notes: 'Análisis de ROI preliminar completado, pendiente validación final',
-        data: {
-          fte: {
-            costPerYear: 12000000,
-            timeUnitType: 'monthly',
-            timeUnitValue: 160
-          },
-          implementationCost: 2120000,
-          processBefore: {
-            minutes: 60,
-            frequencyType: 'monthly',
-            frequencyValue: 4,
-            peopleCount: 2
-          },
-          processAfter: {
-            minutes: 15,
-            frequencyType: 'monthly',
-            frequencyValue: 4,
-            peopleCount: 1
-          },
-          adoption: {
-            curveType: 'exponential',
-            inflectionPoint: 6
-          },
-          results: {
-            hoursSaved: 138,
-            fteEquivalent: 0.72,
-            moneySaved: 8640000,
-            roi: 307.55,
-            paybackMonths: 3.9,
-            lastUpdated: '2026-06-15T09:30:00Z'
-          }
-        }
-      },
-      'project-timeline': {
-        status: 'in_progress',
-        updatedAt: '2026-06-20T15:45:00Z',
-        notes: 'Línea de tiempo inicial creada, falta agregar detalles de implementación',
-        data: {
-          phases: [
-            { name: 'Define', start: '2026-02-16', end: '2026-03-15', complete: 100 },
-            { name: 'Measure', start: '2026-03-16', end: '2026-04-15', complete: 100 },
-            { name: 'Analyze', start: '2026-04-16', end: '2026-05-31', complete: 90 },
-            { name: 'Improve', start: '2026-06-01', end: '2026-07-15', complete: 35 },
-            { name: 'Control', start: '2026-07-16', end: '2026-08-07', complete: 0 }
+      "sipoc": {
+        "status": "completed",
+        "updatedAt": "2026-02-26T14:45:00Z",
+        "notes": "SIPOCs completados para todos los procesos críticos",
+        "data": {
+          "processName": "Gestión de Cobranza",
+          "suppliers": [
+            "Departamento de Ventas",
+            "Departamento Contable",
+            "Clientes"
           ],
-          tasks: [
-            { id: 't1', name: 'Diseño de nuevo proceso de cobranza', start: '2026-06-01', end: '2026-06-15', dependencies: [], complete: 40, resources: ['María Ramírez', 'Juan Pérez'] },
-            { id: 't2', name: 'Implementación de sistema de códigos de barras', start: '2026-06-10', end: '2026-07-10', dependencies: [], complete: 10, resources: ['Laura González'] }
+          "inputs": [
+            "Facturas",
+            "Políticas de crédito",
+            "Información de clientes"
+          ],
+          "process": [
+            "Emitir factura",
+            "Registrar en sistema",
+            "Enviar recordatorios",
+            "Recibir pagos",
+            "Actualizar cuentas"
+          ],
+          "outputs": [
+            "Cobros realizados",
+            "Reportes de morosidad",
+            "Flujo de caja actualizado"
+          ],
+          "customers": [
+            "Departamento Financiero",
+            "Gerencia General",
+            "Departamento de Ventas"
           ]
         }
       },
-      'pareto-chart': {
-        status: 'completed',
-        updatedAt: '2026-03-24T10:15:00Z',
-        notes: 'Análisis de Pareto finalizado para causas de retrasos en cobranza',
-        data: {
-          categories: ['Facturas con errores', 'Retrasos en aprobaciones', 'Información de cliente incorrecta', 'Problemas de comunicación interna', 'Problemas sistema informático', 'Otros'],
-          values: [42, 27, 18, 8, 4, 1],
-          cumulative: [42, 69, 87, 95, 99, 100]
-        }
-      },
-      'control-chart': {
-        status: 'not_started',
-        updatedAt: null,
-        notes: ''
-      },
-      'fmea': {
-        status: 'not_started',
-        updatedAt: null,
-        notes: ''
-      }
-    },
-    risks: [
-      { id: 'risk-1', description: 'Resistencia al cambio por parte del personal', probability: 'alta', impact: 'media', mitigation: 'Programa de gestión del cambio y comunicación constante' },
-      { id: 'risk-2', description: 'Problemas técnicos en implementación de sistema de códigos de barras', probability: 'media', impact: 'alta', mitigation: 'Pruebas piloto y soporte técnico dedicado durante implementación' }
-    ],
-    issues: [
-      { id: 'issue-1', description: 'Dificultad para coordinar reuniones con todos los stakeholders', status: 'resolved', resolution: 'Implementación de reuniones virtuales y grabación para asistencia asíncrona' },
-      { id: 'issue-2', description: 'Datos históricos incompletos para análisis de tendencias', status: 'open', resolution: '' }
-    ],
-    createdAt: '2026-02-05T08:00:00Z',
-    updatedAt: '2026-08-18T10:30:00Z',
-    roiData: {
-      fte: {
-        costPerYear: 12000000,
-        timeUnitType: 'monthly',
-        timeUnitValue: 160
-      },
-      implementationCost: 2120000,
-      processBefore: {
-        minutes: 60,
-        frequencyType: 'monthly',
-        frequencyValue: 4,
-        peopleCount: 2
-      },
-      processAfter: {
-        minutes: 15,
-        frequencyType: 'monthly',
-        frequencyValue: 4,
-        peopleCount: 1
-      },
-      adoption: {
-        curveType: 'exponential',
-        inflectionPoint: 6
-      },
-      results: {
-        hoursSaved: 138,
-        fteEquivalent: 0.72,
-        moneySaved: 8640000,
-        roi: 307.55,
-        paybackMonths: 3.9,
-        lastUpdated: '2026-06-15T09:30:00Z'
-      }
-    }
-  },
-  {
-    id: 'project-2',
-    name: 'Optimización de Línea de Producción',
-    description: 'Mejora de eficiencia en la línea de producción principal utilizando metodología Lean Six Sigma y reducción de defectos en proceso de ensamblaje',
-    status: 'planning',
-    progress: 33,
-    startDate: '2026-09-07',
-    endDate: '2027-01-29',
-    company: 'Manufacturas Industriales S.A.',
-    phase: 'Define',
-    team: [
-      { id: 'team-3', name: 'Roberto Jiménez', role: 'Patrocinador', position: 'Director de Operaciones', email: 'rjimenez@misa.com' },
-      { id: 'team-4', name: 'Ana Castro', role: 'Líder del Proyecto', position: 'Black Belt en Six Sigma', email: 'acastro@misa.com' },
-      { id: 'team-5', name: 'Fernando Méndez', role: 'Miembro', position: 'Ingeniero de Procesos', email: 'fmendez@misa.com' },
-      { id: 'team-6', name: 'Patricia Solís', role: 'Miembro', position: 'Supervisora de Calidad', email: 'psolis@misa.com' }
-    ],
-    kpis: [
-      { id: 'kpi-4', name: 'OEE (Eficiencia General de Equipos)', baseLine: '68%', target: '85%', current: '72%' },
-      { id: 'kpi-5', name: 'Tasa de Defectos', baseLine: '3.2%', target: '0.8%', current: '2.9%' },
-      { id: 'kpi-6', name: 'Tiempo de Preparación (Setup)', baseLine: '45 minutos', target: '15 minutos', current: '40 minutos' }
-    ],
-    tools: {
-      'project-charter': {
-        status: 'completed',
-        updatedAt: '2026-08-06T09:15:00Z',
-        notes: 'Project Charter aprobado por Dirección de Operaciones y Gerencia General',
-        data: {
-          businessCase: 'La línea de producción principal opera con una eficiencia del 68% frente al estándar industrial del 85%. Los tiempos de preparación y la tasa de defectos generan costos adicionales estimados en ₡25 millones anuales.',
-          problemStatement: 'La baja eficiencia y alta tasa de defectos impactan negativamente en los costos de producción y los tiempos de entrega, afectando la competitividad de la empresa en el mercado.',
-          scope: 'Incluye línea de producción principal, procesos de ensamblaje, y sistemas de control de calidad. No incluye procesos logísticos ni de aprovisionamiento de materia prima.',
-          goals: 'Aumentar el OEE a 85%, reducir la tasa de defectos por debajo del 0.8% y reducir el tiempo de preparación a 15 minutos o menos.'
-        }
-      },
-      'sipoc': {
-        status: 'in_progress',
-        updatedAt: '2026-08-10T14:30:00Z',
-        notes: 'SIPOC de proceso de ensamblaje completado, pendiente revisión' ,
-        data: {
-          processName: 'Ensamblaje de Componentes',
-          suppliers: ['Almacén de Materiales', 'Área de Mecanizado', 'Proveedores Externos'],
-          inputs: ['Componentes electrónicos', 'Estructuras metálicas', 'Instrucciones de ensamblaje', 'Herramientas'],
-          process: ['Preparar estación', 'Verificar componentes', 'Ensamblar subconjuntos', 'Integrar sistema', 'Verificar funcionamiento'],
-          outputs: ['Producto ensamblado', 'Reportes de calidad', 'Productos defectuosos'],
-          customers: ['Departamento de Control de Calidad', 'Área de Empaque', 'Servicio al Cliente']
-        }
-      },
-      'voc': {
-        status: 'in_progress',
-        updatedAt: '2026-08-09T11:00:00Z',
-        notes: 'Entrevistas iniciales con clientes internos completadas',
-        data: {
-          customers: [
-            { type: 'Interno', comment: 'Los productos defectuosos nos obligan a reprocesar y generan retrasos en las entregas', importance: 5 },
-            { type: 'Externo', comment: 'Los tiempos de entrega son más largos que la competencia y nos generan problemas de planificación', importance: 4 },
-            { type: 'Interno', comment: 'El tiempo de preparación entre lotes es excesivo y reduce nuestra capacidad de producción', importance: 4 }
-          ]
-        }
-      },
-      '5s': {
-        status: 'not_started',
-        updatedAt: null,
-        notes: 'Programado para iniciar en fase de Mejora',
-        data: null
-      },
-      'stakeholder-analysis': {
-        status: 'completed',
-        updatedAt: '2026-08-05T16:45:00Z',
-        notes: 'Análisis de stakeholders completado',
-        data: {
-          stakeholders: [
-            { name: 'Gerencia General', interest: 'alto', influence: 'alto', concerns: 'Costo de implementación, ROI del proyecto', strategy: 'Presentaciones mensuales de avance con énfasis en impacto financiero' },
-            { name: 'Operarios de Línea', interest: 'alto', influence: 'medio', concerns: 'Cambios en procedimientos, potencial reducción de personal', strategy: 'Comunicación clara sobre beneficios, involucramiento en diseño de soluciones' },
-            { name: 'Clientes Clave', interest: 'medio', influence: 'alto', concerns: 'Mejoras en calidad y tiempos de entrega', strategy: 'Comunicación de mejoras esperadas, solicitar retroalimentación' }
-          ]
-        }
-      },
-      'roi-calculator': {
-        status: 'in_progress',
-        updatedAt: '2026-08-07T10:30:00Z',
-        notes: 'Estimaciones preliminares realizadas, pendiente validación de datos',
-        data: {
-          fte: {
-            costPerYear: 14500000,
-            timeUnitType: 'monthly',
-            timeUnitValue: 160
-          },
-          implementationCost: 8500000,
-          processBefore: {
-            minutes: 45,
-            frequencyType: 'daily',
-            frequencyValue: 8,
-            peopleCount: 3
-          },
-          processAfter: {
-            minutes: 15,
-            frequencyType: 'daily',
-            frequencyValue: 8,
-            peopleCount: 2
-          },
-          adoption: {
-            curveType: 'linear',
-            inflectionPoint: 6
-          },
-          results: {
-            hoursSaved: 1560,
-            fteEquivalent: 0.81,
-            moneySaved: 11745000,
-            roi: 38.18,
-            paybackMonths: 8.7,
-            lastUpdated: '2026-08-07T10:30:00Z'
-          }
-        }
-      }
-    },
-    risks: [
-      { id: 'risk-3', description: 'Interrupciones en producción durante implementación de mejoras', probability: 'alta', impact: 'alta', mitigation: 'Programar cambios durante períodos de mantenimiento programado y fines de semana' },
-      { id: 'risk-4', description: 'Falta de experiencia del equipo en técnicas avanzadas de six sigma', probability: 'media', impact: 'alta', mitigation: 'Capacitación previa y contratación de consultor especializado para acompañamiento' }
-    ],
-    issues: [],
-    createdAt: '2026-08-05T08:00:00Z',
-    updatedAt: '2026-08-11T14:30:00Z',
-    roiData: {
-      fte: {
-        costPerYear: 14500000,
-        timeUnitType: 'monthly',
-        timeUnitValue: 160
-      },
-      implementationCost: 8500000,
-      processBefore: {
-        minutes: 45,
-        frequencyType: 'daily',
-        frequencyValue: 8,
-        peopleCount: 3
-      },
-      processAfter: {
-        minutes: 15,
-        frequencyType: 'daily',
-        frequencyValue: 8,
-        peopleCount: 2
-      },
-      adoption: {
-        curveType: 'linear',
-        inflectionPoint: 6
-      },
-      results: {
-        hoursSaved: 1560,
-        fteEquivalent: 0.81,
-        moneySaved: 11745000,
-        roi: 38.18,
-        paybackMonths: 8.7,
-        lastUpdated: '2026-08-07T10:30:00Z'
-      }
-    }
-  },
-  {
-    id: 'project-3',
-    name: 'Reducción de Errores en Servicio al Cliente',
-    description: 'Aplicación de Six Sigma para reducir errores y mejorar satisfacción del cliente en el centro de atención telefónica y gestión de casos',
-    status: 'completed',
-    progress: 100,
-    startDate: '2025-11-03',
-    endDate: '2026-03-27',
-    company: 'Soluciones Financieras S.A.',
-    phase: 'Control',
-    team: [
-      { id: 'team-7', name: 'Diana Vargas', role: 'Patrocinador', position: 'Gerente de Servicio al Cliente', email: 'dvargas@sofi.com' },
-      { id: 'team-8', name: 'Javier Rojas', role: 'Líder del Proyecto', position: 'Green Belt en Six Sigma', email: 'jrojas@sofi.com' },
-      { id: 'team-9', name: 'Karla Monge', role: 'Miembro', position: 'Supervisora de Call Center', email: 'kmonge@sofi.com' },
-      { id: 'team-10', name: 'Rodrigo Arias', role: 'Miembro', position: 'Analista de Calidad', email: 'rarias@sofi.com' }
-    ],
-    kpis: [
-      { id: 'kpi-7', name: 'First Call Resolution', baseLine: '65%', target: '85%', current: '88%' },
-      { id: 'kpi-8', name: 'Errores en Procesamiento de Solicitudes', baseLine: '8.5%', target: '3%', current: '2.8%' },
-      { id: 'kpi-9', name: 'Satisfacción del Cliente (NPS)', baseLine: '42', target: '65', current: '68' }
-    ],
-    tools: {
-      'project-charter': {
-        status: 'completed',
-        updatedAt: '2025-11-10T11:30:00Z',
-        notes: 'Project Charter aprobado',
-        data: {
-          businessCase: 'El bajo índice de resolución en primera llamada (65%) y la alta tasa de errores en procesamiento (8.5%) están generando pérdida de clientes y sobrecostos operativos estimados en ₡18 millones anuales.',
-          problemStatement: 'Los errores en el servicio al cliente generan reprocesos, insatisfacción y pérdida de clientes, afectando la rentabilidad y reputación de la empresa.',
-          scope: 'Centro de atención telefónica, procesos de gestión de casos y sistema CRM. No incluye productos financieros ni políticas comerciales.',
-          goals: 'Aumentar el First Call Resolution a 85%, reducir errores en procesamiento por debajo del 3% y elevar el NPS de 42 a 65 puntos.'
-        }
-      },
-      'sipoc': {
-        status: 'completed',
-        updatedAt: '2025-11-20T15:45:00Z',
-        notes: 'SIPOCs desarrollados para todos los procesos críticos',
-        data: {
-          processName: 'Atención de Consultas y Reclamos',
-          suppliers: ['Clientes', 'Departamento de Productos', 'Sistemas IT'],
-          inputs: ['Consultas/reclamos de clientes', 'Información de productos', 'Historial del cliente', 'Políticas de servicio'],
-          process: ['Recibir consulta/reclamo', 'Identificar tipo de caso', 'Consultar información relevante', 'Proporcionar solución', 'Registrar caso'],
-          outputs: ['Caso resuelto', 'Caso escalado', 'Información de retroalimentación', 'Registros de interacción'],
-          customers: ['Clientes Externos', 'Departamento de Mejora Continua', 'Gerencia de Servicio']
-        }
-      },
-      'voc': {
-        status: 'completed',
-        updatedAt: '2025-12-05T14:20:00Z',
-        notes: 'VOC completado con clientes y empleados',
-        data: {
-          customers: [
-            { type: 'Externo', comment: 'Me transfieren múltiples veces y tengo que repetir mi problema a diferentes personas', importance: 5 },
-            { type: 'Externo', comment: 'Las soluciones prometidas no siempre se cumplen en los tiempos indicados', importance: 5 },
-            { type: 'Interno', comment: 'No tenemos acceso rápido a toda la información necesaria para resolver casos en primera llamada', importance: 4 }
-          ]
-        }
-      },
-      'ctq': {
-        status: 'completed',
-        updatedAt: '2025-12-25T09:15:00Z',
-        notes: 'CTQs definidos y validados',
-        data: {
-          requirements: [
-            { need: 'Resolución en primera llamada', driver: 'Eficiencia', measure: 'Porcentaje de casos resueltos sin transferencias', target: '≥ 85%' },
-            { need: 'Precisión en el procesamiento', driver: 'Calidad', measure: 'Porcentaje de solicitudes procesadas sin errores', target: '≥ 97%' },
-            { need: 'Experiencia del cliente positiva', driver: 'Satisfacción', measure: 'Net Promoter Score (NPS)', target: '≥ 65' }
-          ]
-        }
-      },
-      'value-stream-map': {
-        status: 'completed',
-        updatedAt: '2026-01-15T16:30:00Z',
-        notes: 'VSM completado y validado',
-        data: {
-          currentState: {
-            totalLeadTime: '3.5 días',
-            valueAddedTime: '32 minutos',
-            mainWastes: ['Transferencias múltiples', 'Tiempo de espera por información', 'Reprocesos por información incompleta']
-          },
-          futureState: {
-            targetLeadTime: '1 día',
-            improvements: ['Dashboard unificado de información', 'Scripts mejorados para diagnóstico inicial', 'Capacitación cruzada para reducir transferencias']
-          }
-        }
-      },
-      'stakeholder-analysis': {
-        status: 'completed',
-        updatedAt: '2025-11-15T10:20:00Z',
-        notes: 'Análisis stakeholders finalizado',
-        data: {
-          stakeholders: [
-            { name: 'Equipo de Atención al Cliente', interest: 'alto', influence: 'alto', concerns: 'Cambios en procedimientos, medición de desempeño', strategy: 'Co-creación de soluciones, comunicación constante de beneficios' },
-            { name: 'Departamento IT', interest: 'medio', influence: 'alto', concerns: 'Cambios en sistemas, recursos necesarios', strategy: 'Involucrar desde fase temprana, priorizar requerimientos' },
-            { name: 'Clientes', interest: 'bajo', influence: 'alto', concerns: 'Mejora en servicio, mínima interrupción', strategy: 'Comunicar mejoras, implementar cambios transparentes' }
-          ]
-        }
-      },
-      'prioritization-matrix': {
-        status: 'completed',
-        updatedAt: '2026-01-10T13:40:00Z',
-        notes: 'Matriz priorización completada',
-        data: {
-          criteria: ['Impacto en satisfacción', 'Facilidad de implementación', 'Costo', 'Tiempo de implementación'],
-          initiatives: [
-            { name: 'Dashboard unificado de información', scores: [5, 3, 2, 2], total: 12 },
-            { name: 'Capacitación cruzada de personal', scores: [4, 4, 4, 3], total: 15 },
-            { name: 'Rediseño de scripts de atención', scores: [5, 5, 5, 4], total: 19 }
-          ]
-        }
-      },
-      'control-chart': {
-        status: 'completed',
-        updatedAt: '2026-03-17T14:30:00Z',
-        notes: 'Gráficos de control implementados para monitoreo continuo',
-        data: {
-          metricName: 'Porcentaje de Errores en Procesamiento',
-          centerLine: 2.8,
-          upperControlLimit: 4.5,
-          lowerControlLimit: 1.1,
-          measurements: [2.9, 3.1, 2.6, 2.7, 3.0, 2.5, 2.8, 2.7, 2.6, 2.8, 2.9, 3.0],
-          outOfControl: false
-        }
-      },
-      'fmea': {
-        status: 'completed',
-        updatedAt: '2026-02-04T11:20:00Z',
-        notes: 'FMEA completo para procesos críticos',
-        data: {
-          process: 'Atención de Reclamaciones',
-          failureModes: [
+      "voc": {
+        "status": "completed",
+        "updatedAt": "2026-03-14T09:15:00Z",
+        "notes": "Análisis VOC completado con todos los grupos de stakeholders",
+        "data": {
+          "customers": [
             {
-              mode: 'Registro incorrecto de información del cliente',
-              effect: 'Seguimiento inadecuado, cliente contactado múltiples veces',
-              causes: 'Formulario complejo, falta de validación, presión por tiempo',
-              severity: 8,
-              occurrence: 7,
-              detection: 5,
-              rpn: 280,
-              actions: 'Simplificar formulario, agregar validaciones automáticas'
+              "type": "Interno",
+              "comment": "Necesitamos información precisa sobre el inventario disponible para prometer fechas de entrega realistas a los clientes",
+              "importance": 5
             },
             {
-              mode: 'Categorización errónea del caso',
-              effect: 'Enrutamiento incorrecto, resolución retrasada',
-              causes: 'Falta de criterios claros, formación insuficiente',
-              severity: 6,
-              occurrence: 6,
-              detection: 4,
-              rpn: 144,
-              actions: 'Árbol de decisión automatizado, capacitación periódica'
+              "type": "Externo",
+              "comment": "Las inconsistencias entre lo facturado y lo entregado generan problemas en nuestra contabilidad",
+              "importance": 4
+            },
+            {
+              "type": "Interno",
+              "comment": "Los retrasos en cobranza afectan nuestro flujo de caja y capacidad de inversión",
+              "importance": 5
             }
           ]
         }
       },
-      'pareto-chart': {
-        status: 'completed',
-        updatedAt: '2025-12-30T15:15:00Z',
-        notes: 'Análisis de Pareto de causas de insatisfacción completado',
-        data: {
-          categories: ['Múltiples transferencias', 'Tiempo de espera', 'Información inconsistente', 'Promesas incumplidas', 'Trato inadecuado', 'Otros'],
-          values: [38, 29, 15, 10, 5, 3],
-          cumulative: [38, 67, 82, 92, 97, 100]
+      "ctq": {
+        "status": "completed",
+        "updatedAt": "2026-04-01T16:20:00Z",
+        "notes": "Indicadores CTQ definidos y validados con stakeholders",
+        "data": {
+          "requirements": [
+            {
+              "need": "Información de inventario precisa",
+              "driver": "Exactitud",
+              "measure": "Porcentaje de coincidencia entre sistema y conteo físico",
+              "target": "≥ 98%"
+            },
+            {
+              "need": "Cobros oportunos",
+              "driver": "Tiempo",
+              "measure": "Días promedio de ciclo de cobranza",
+              "target": "≤ 30 días"
+            },
+            {
+              "need": "Reducción de cuentas vencidas",
+              "driver": "Porcentaje",
+              "measure": "Porcentaje de cuentas por cobrar con más de 30 días",
+              "target": "≤ 10%"
+            }
+          ]
         }
       },
-      'roi-calculator': {
-        status: 'completed',
-        updatedAt: '2026-02-14T10:45:00Z',
-        notes: 'Análisis de ROI validado con Finanzas',
-        data: {
-          fte: {
-            costPerYear: 9500000,
-            timeUnitType: 'monthly',
-            timeUnitValue: 160
+      "value-stream-map": {
+        "status": "in_progress",
+        "updatedAt": "2026-05-15T11:00:00Z",
+        "notes": "VSM en proceso de validación final",
+        "data": {
+          "currentState": {
+            "totalLeadTime": "45 días",
+            "valueAddedTime": "12 horas",
+            "mainWastes": [
+              "Esperas entre departamentos",
+              "Reprocesos por errores de facturación",
+              "Movimientos innecesarios de documentación"
+            ]
           },
-          implementationCost: 3750000,
-          processBefore: {
-            minutes: 18,
-            frequencyType: 'daily',
-            frequencyValue: 120,
-            peopleCount: 1
-          },
-          processAfter: {
-            minutes: 10,
-            frequencyType: 'daily',
-            frequencyValue: 120,
-            peopleCount: 1
-          },
-          adoption: {
-            curveType: 'exponential',
-            inflectionPoint: 4
-          },
-          results: {
-            hoursSaved: 3650,
-            fteEquivalent: 1.9,
-            moneySaved: 18050000,
-            roi: 381.33,
-            paybackMonths: 2.5,
-            lastUpdated: '2026-02-14T10:45:00Z'
+          "futureState": {
+            "targetLeadTime": "30 días",
+            "improvements": [
+              "Automatización de recordatorios",
+              "Procesamiento paralelo de documentación",
+              "Eliminación de aprobaciones redundantes"
+            ]
           }
+        }
+      },
+      "stakeholder-analysis": {
+        "status": "completed",
+        "updatedAt": "2026-03-09T15:30:00Z",
+        "notes": "Análisis de stakeholders finalizado",
+        "data": {
+          "stakeholders": [
+            {
+              "name": "Gerencia General",
+              "interest": "alto",
+              "influence": "alto",
+              "concerns": "ROI del proyecto, mejora en flujo de caja",
+              "strategy": "Comunicar avances semanales, mostrar impacto financiero"
+            },
+            {
+              "name": "Personal de Almacén",
+              "interest": "medio",
+              "influence": "alto",
+              "concerns": "Cambios en procesos diarios, posible aumento de carga laboral",
+              "strategy": "Involucrar en diseño de soluciones, capacitación"
+            },
+            {
+              "name": "Clientes Principales",
+              "interest": "bajo",
+              "influence": "alto",
+              "concerns": "Cambios en procesos de facturación y cobro",
+              "strategy": "Comunicar cambios con anticipación, destacar beneficios"
+            }
+          ]
+        }
+      },
+      "cause-effect-diagram": {
+        "status": "completed",
+        "updatedAt": "2026-03-19T13:25:00Z",
+        "notes": "Diagrama de Ishikawa completado para problemas de cobranza e inventario",
+        "data": {
+          "problem": "Ciclo de cobranza extendido",
+          "categories": [
+            {
+              "name": "Personal",
+              "causes": [
+                "Falta de capacitación en seguimiento",
+                "Rotación alta en el departamento",
+                "No hay incentivos por cobros oportunos"
+              ]
+            },
+            {
+              "name": "Métodos",
+              "causes": [
+                "Proceso manual de seguimiento",
+                "Política de cobro poco clara",
+                "Falta de escalamiento para casos críticos"
+              ]
+            },
+            {
+              "name": "Sistemas",
+              "causes": [
+                "Software desactualizado",
+                "Falta de alertas automáticas",
+                "Reportes poco claros para seguimiento"
+              ]
+            },
+            {
+              "name": "Entorno",
+              "causes": [
+                "Cultura de pago tardío en el mercado",
+                "Problemas económicos de clientes",
+                "Competencia con términos más flexibles"
+              ]
+            }
+          ]
+        }
+      },
+      "prioritization-matrix": {
+        "status": "in_progress",
+        "updatedAt": "2026-06-10T13:45:00Z",
+        "notes": "Matriz de priorización en desarrollo",
+        "data": {
+          "criteria": [
+            "Impacto en flujo de caja",
+            "Facilidad de implementación",
+            "Costo",
+            "Tiempo requerido"
+          ],
+          "initiatives": [
+            {
+              "name": "Automatización de recordatorios de pago",
+              "scores": [
+                5,
+                4,
+                3,
+                4
+              ],
+              "total": 16
+            },
+            {
+              "name": "Rediseño de políticas de crédito",
+              "scores": [
+                5,
+                2,
+                5,
+                2
+              ],
+              "total": 14
+            },
+            {
+              "name": "Implementación de sistema de códigos de barras en inventario",
+              "scores": [
+                3,
+                3,
+                2,
+                3
+              ],
+              "total": 11
+            }
+          ]
+        }
+      },
+      "roi-calculator": {
+        "status": "in_progress",
+        "updatedAt": "2026-06-15T09:30:00Z",
+        "notes": "Análisis de ROI preliminar completado, pendiente validación final",
+        "data": {
+          "fte": {
+            "costPerYear": 12000000,
+            "timeUnitType": "monthly",
+            "timeUnitValue": 160
+          },
+          "implementationCost": 2120000,
+          "processBefore": {
+            "minutes": 60,
+            "frequencyType": "monthly",
+            "frequencyValue": 4,
+            "peopleCount": 2
+          },
+          "processAfter": {
+            "minutes": 15,
+            "frequencyType": "monthly",
+            "frequencyValue": 4,
+            "peopleCount": 1
+          },
+          "adoption": {
+            "curveType": "exponential",
+            "inflectionPoint": 6
+          },
+          "results": {
+            "hoursSaved": 138,
+            "fteEquivalent": 0.72,
+            "moneySaved": 8640000,
+            "roi": 307.55,
+            "paybackMonths": 3.9,
+            "lastUpdated": "2026-06-15T09:30:00Z"
+          }
+        }
+      },
+      "project-timeline": {
+        "status": "in_progress",
+        "updatedAt": "2026-06-20T15:45:00Z",
+        "notes": "Línea de tiempo inicial creada, falta agregar detalles de implementación",
+        "data": {
+          "phases": [
+            {
+              "name": "Define",
+              "start": "2026-02-16",
+              "end": "2026-03-15",
+              "complete": 100
+            },
+            {
+              "name": "Measure",
+              "start": "2026-03-16",
+              "end": "2026-04-15",
+              "complete": 100
+            },
+            {
+              "name": "Analyze",
+              "start": "2026-04-16",
+              "end": "2026-05-31",
+              "complete": 90
+            },
+            {
+              "name": "Improve",
+              "start": "2026-06-01",
+              "end": "2026-07-15",
+              "complete": 35
+            },
+            {
+              "name": "Control",
+              "start": "2026-07-16",
+              "end": "2026-08-07",
+              "complete": 0
+            }
+          ],
+          "tasks": [
+            {
+              "id": "t1",
+              "name": "Diseño de nuevo proceso de cobranza",
+              "start": "2026-06-01",
+              "end": "2026-06-15",
+              "dependencies": [],
+              "complete": 40,
+              "resources": [
+                "María Ramírez",
+                "Juan Pérez"
+              ]
+            },
+            {
+              "id": "t2",
+              "name": "Implementación de sistema de códigos de barras",
+              "start": "2026-06-10",
+              "end": "2026-07-10",
+              "dependencies": [],
+              "complete": 10,
+              "resources": [
+                "Laura González"
+              ]
+            }
+          ]
+        }
+      },
+      "pareto-chart": {
+        "status": "completed",
+        "updatedAt": "2026-03-24T10:15:00Z",
+        "notes": "Análisis de Pareto finalizado para causas de retrasos en cobranza",
+        "data": {
+          "categories": [
+            "Facturas con errores",
+            "Retrasos en aprobaciones",
+            "Información de cliente incorrecta",
+            "Problemas de comunicación interna",
+            "Problemas sistema informático",
+            "Otros"
+          ],
+          "values": [
+            42,
+            27,
+            18,
+            8,
+            4,
+            1
+          ],
+          "cumulative": [
+            42,
+            69,
+            87,
+            95,
+            99,
+            100
+          ]
+        }
+      },
+      "control-chart": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-14T09:00:00Z",
+        "notes": "Se detectó un punto fuera de control en el cierre de mes atribuido a acumulación de facturas represadas; se investiga causa raíz antes de declarar el proceso estable.",
+        "data": {
+          "metricName": "Tiempo de Ciclo de Cobranza (días)",
+          "centerLine": 32.5,
+          "upperControlLimit": 39,
+          "lowerControlLimit": 26,
+          "measurements": [
+            33,
+            31,
+            34,
+            30,
+            32,
+            36,
+            29,
+            33,
+            31,
+            41,
+            30,
+            32
+          ],
+          "outOfControl": true
+        }
+      },
+      "fmea": {
+        "status": "completed",
+        "updatedAt": "2026-07-28T11:00:00Z",
+        "notes": "El FMEA identifica el escalamiento tardío de cuentas críticas y la resistencia al lector de código de barras como los riesgos de mayor prioridad (RPN) para sostener las mejoras logradas.",
+        "data": {
+          "process": "Proceso Mejorado de Cobranza e Inventario con Código de Barras (Fase de Control)",
+          "failureModes": [
+            {
+              "id": "project-1-fm-1",
+              "mode": "Falla en lectura de código de barras por etiquetas dañadas o mal impresas",
+              "effect": "Registro manual de respaldo, retraso en actualización de inventario y reintroducción de discrepancias",
+              "causes": "Impresora térmica de etiquetas de baja calidad, exposición a humedad y polvo en bodega, etiquetas colocadas sobre superficies irregulares",
+              "severity": 7,
+              "occurrence": 6,
+              "detection": 4,
+              "rpn": 168,
+              "actions": "Cambio a etiquetas de vinilo resistentes, plan de mantenimiento preventivo de impresoras y punto de verificación de legibilidad al recibir mercadería"
+            },
+            {
+              "id": "project-1-fm-2",
+              "mode": "Resistencia del personal de almacén al uso del lector de código de barras y reversión al conteo manual",
+              "effect": "Inventario no actualizado en tiempo real, pérdida del beneficio de exactitud esperado del nuevo sistema",
+              "causes": "Capacitación insuficiente, percepción de mayor carga de trabajo, temor a evaluación de desempeño individual",
+              "severity": 6,
+              "occurrence": 7,
+              "detection": 6,
+              "rpn": 252,
+              "actions": "Reforzar capacitación práctica, incluir indicador de uso del lector en el tablero 5S y dar retroalimentación positiva desde supervisión"
+            },
+            {
+              "id": "project-1-fm-3",
+              "mode": "Recordatorios automáticos de cobro enviados con datos de contacto desactualizados",
+              "effect": "El cliente no recibe la notificación de pago y la cuenta cae en mora sin gestión previa",
+              "causes": "Datos históricos incompletos en la base de clientes, ausencia de un proceso de validación periódica de contactos",
+              "severity": 8,
+              "occurrence": 5,
+              "detection": 5,
+              "rpn": 200,
+              "actions": "Depuración inicial de la base de datos de clientes, validación telefónica trimestral y alerta automática cuando un correo rebota"
+            },
+            {
+              "id": "project-1-fm-4",
+              "mode": "Escalamiento tardío de cuentas críticas por falta de seguimiento tras el recordatorio automático",
+              "effect": "Las cuentas vencidas superan los 30 días sin gestión de cobro directa, afectando el KPI de cuentas por cobrar vencidas",
+              "causes": "No existe una regla clara de escalamiento a gestión de cobro; se depende de la revisión manual del analista",
+              "severity": 7,
+              "occurrence": 6,
+              "detection": 7,
+              "rpn": 294,
+              "actions": "Automatizar la regla de escalamiento a los 35 días sin pago, con asignación automática al analista y reporte semanal de cuentas críticas a gerencia"
+            }
+          ]
+        }
+      },
+      "5s": {
+        "status": "completed",
+        "updatedAt": "2026-07-22T14:00:00Z",
+        "notes": "Implementación de 5S en el almacén principal completada, con mejoras visibles en tiempos de ubicación de mercadería que respaldan el KPI de exactitud de inventario.",
+        "data": {
+          "areas": [
+            "Zona de recepción de mercadería",
+            "Estantería de herramientas manuales y eléctricas",
+            "Área de empaque y despacho",
+            "Bodega de repuestos y ferretería menor"
+          ],
+          "currentState": {
+            "sort": 4,
+            "setInOrder": 4,
+            "shine": 3,
+            "standardize": 3,
+            "sustain": 3
+          },
+          "targetState": {
+            "sort": 5,
+            "setInOrder": 5,
+            "shine": 4,
+            "standardize": 4,
+            "sustain": 4
+          },
+          "improvements": [
+            "Reubicación de herramientas de uso frecuente en estaciones al alcance y eliminación de repuestos obsoletos o duplicados en bodega",
+            "Rotulación con código de colores y numeración de ubicaciones (rack-nivel-casillero) alineada con el nuevo sistema de código de barras",
+            "Definición de rutina diaria de orden de 10 minutos antes del cierre, con limpieza de pasillos y racks",
+            "Checklist de auditoría 5S semanal a cargo de Laura González, con tablero visual de cumplimiento por zona",
+            "Capacitación al personal de almacén sobre estándares de acomodo y devolución de herramientas a su ubicación asignada"
+          ]
         }
       }
     },
-    lessons: [
-      { id: 'lesson-1', category: 'Positivo', description: 'La participación temprana de los agentes de primera línea fue clave para identificar problemas reales y desarrollar soluciones prácticas' },
-      { id: 'lesson-2', category: 'Desafío', description: 'Las actualizaciones del sistema CRM tomaron más tiempo del previsto, lo que retrasó algunas implementaciones' },
-      { id: 'lesson-3', category: 'Mejora', description: 'Para futuros proyectos, involucrar al departamento IT desde la fase de planificación para evitar cuellos de botella' }
+    "risks": [
+      {
+        "id": "risk-1",
+        "description": "Resistencia al cambio por parte del personal",
+        "probability": "alta",
+        "impact": "media",
+        "mitigation": "Programa de gestión del cambio y comunicación constante"
+      },
+      {
+        "id": "risk-2",
+        "description": "Problemas técnicos en implementación de sistema de códigos de barras",
+        "probability": "media",
+        "impact": "alta",
+        "mitigation": "Pruebas piloto y soporte técnico dedicado durante implementación"
+      }
     ],
-    createdAt: '2025-10-15T09:00:00Z',
-    updatedAt: '2026-03-27T16:30:00Z',
-    roiData: {
-      fte: {
-        costPerYear: 9500000,
-        timeUnitType: 'monthly',
-        timeUnitValue: 160
+    "issues": [
+      {
+        "id": "issue-1",
+        "description": "Dificultad para coordinar reuniones con todos los stakeholders",
+        "status": "resolved",
+        "resolution": "Implementación de reuniones virtuales y grabación para asistencia asíncrona"
       },
-      implementationCost: 3750000,
-      processBefore: {
-        minutes: 18,
-        frequencyType: 'daily',
-        frequencyValue: 120,
-        peopleCount: 1
+      {
+        "id": "issue-2",
+        "description": "Datos históricos incompletos para análisis de tendencias",
+        "status": "open",
+        "resolution": ""
+      }
+    ],
+    "createdAt": "2026-02-05T08:00:00Z",
+    "updatedAt": "2026-08-18T10:30:00Z",
+    "roiData": {
+      "fte": {
+        "costPerYear": 12000000,
+        "timeUnitType": "monthly",
+        "timeUnitValue": 160
       },
-      processAfter: {
-        minutes: 10,
-        frequencyType: 'daily',
-        frequencyValue: 120,
-        peopleCount: 1
+      "implementationCost": 2120000,
+      "processBefore": {
+        "minutes": 60,
+        "frequencyType": "monthly",
+        "frequencyValue": 4,
+        "peopleCount": 2
       },
-      adoption: {
-        curveType: 'exponential',
-        inflectionPoint: 4
+      "processAfter": {
+        "minutes": 15,
+        "frequencyType": "monthly",
+        "frequencyValue": 4,
+        "peopleCount": 1
       },
-      results: {
-        hoursSaved: 3650,
-        fteEquivalent: 1.9,
-        moneySaved: 18050000,
-        roi: 381.33,
-        paybackMonths: 2.5,
-        lastUpdated: '2026-02-14T10:45:00Z'
+      "adoption": {
+        "curveType": "exponential",
+        "inflectionPoint": 6
+      },
+      "results": {
+        "hoursSaved": 138,
+        "fteEquivalent": 0.72,
+        "moneySaved": 8640000,
+        "roi": 307.55,
+        "paybackMonths": 3.9,
+        "lastUpdated": "2026-06-15T09:30:00Z"
       }
     }
   },
   {
-    id: 'project-4',
-    name: 'Mejora de Procesos Logísticos',
-    description: 'Proyecto Lean Six Sigma para reducir tiempos de entrega y optimizar rutas de distribución utilizando análisis de datos',
-    status: 'active',
-    progress: 67,
-    startDate: '2026-03-02',
-    endDate: '2026-09-04',
-    company: 'Distribuidora Nacional S.A.',
-    phase: 'Analyze',
-    team: [
-      { id: 'team-11', name: 'Ricardo Mora', role: 'Patrocinador', position: 'Director de Logística', email: 'rmora@dinasa.com' },
-      { id: 'team-12', name: 'Silvia Campos', role: 'Líder del Proyecto', position: 'Black Belt en Six Sigma', email: 'scampos@dinasa.com' },
-      { id: 'team-13', name: 'José Hernández', role: 'Miembro', position: 'Jefe de Transportes', email: 'jhernandez@dinasa.com' }
+    "id": "project-2",
+    "name": "Optimización de Línea de Producción",
+    "description": "Mejora de eficiencia en la línea de producción principal utilizando metodología Lean Six Sigma y reducción de defectos en proceso de ensamblaje",
+    "status": "planning",
+    "progress": 33,
+    "startDate": "2026-09-07",
+    "endDate": "2027-01-29",
+    "company": "Manufacturas Industriales S.A.",
+    "phase": "Define",
+    "team": [
+      {
+        "id": "team-3",
+        "name": "Roberto Jiménez",
+        "role": "Patrocinador",
+        "position": "Director de Operaciones",
+        "email": "rjimenez@misa.com"
+      },
+      {
+        "id": "team-4",
+        "name": "Ana Castro",
+        "role": "Líder del Proyecto",
+        "position": "Black Belt en Six Sigma",
+        "email": "acastro@misa.com"
+      },
+      {
+        "id": "team-5",
+        "name": "Fernando Méndez",
+        "role": "Miembro",
+        "position": "Ingeniero de Procesos",
+        "email": "fmendez@misa.com"
+      },
+      {
+        "id": "team-6",
+        "name": "Patricia Solís",
+        "role": "Miembro",
+        "position": "Supervisora de Calidad",
+        "email": "psolis@misa.com"
+      }
     ],
-    kpis: [
-      { id: 'kpi-10', name: 'Tiempo Promedio de Entrega', baseLine: '48 horas', target: '24 horas', current: '36 horas' },
-      { id: 'kpi-11', name: 'Costo por Kilómetro', baseLine: '₡420', target: '₡350', current: '₡385' },
-      { id: 'kpi-12', name: 'Tasa de Entregas Perfectas', baseLine: '82%', target: '95%', current: '88%' }
+    "kpis": [
+      {
+        "id": "kpi-4",
+        "name": "OEE (Eficiencia General de Equipos)",
+        "baseLine": "68%",
+        "target": "85%",
+        "current": "72%"
+      },
+      {
+        "id": "kpi-5",
+        "name": "Tasa de Defectos",
+        "baseLine": "3.2%",
+        "target": "0.8%",
+        "current": "2.9%"
+      },
+      {
+        "id": "kpi-6",
+        "name": "Tiempo de Preparación (Setup)",
+        "baseLine": "45 minutos",
+        "target": "15 minutos",
+        "current": "40 minutos"
+      }
     ],
-    tools: {
-      'project-charter': {
-        status: 'completed',
-        updatedAt: '2026-03-08T14:30:00Z',
-        notes: 'Project Charter aprobado por dirección',
-        data: {
-          businessCase: 'Los tiempos de entrega actuales y la ineficiencia en rutas generan un sobrecosto anual de ₡32 millones y afectan la satisfacción de los clientes, poniendo en riesgo contratos por ₡150 millones.',
-          problemStatement: 'Los tiempos de entrega promedio de 48 horas y la tasa de entregas perfectas del 82% están muy por debajo de los estándares del mercado y generan insatisfacción en los clientes.',
-          scope: 'Incluye procesos de planificación de rutas, despacho, transporte y entrega. No incluye procesos de almacenamiento ni aprovisionamiento.',
-          goals: 'Reducir el tiempo promedio de entrega a 24 horas, disminuir el costo por kilómetro a ₡350 y aumentar la tasa de entregas perfectas al 95%.'
+    "tools": {
+      "project-charter": {
+        "status": "completed",
+        "updatedAt": "2026-08-06T09:15:00Z",
+        "notes": "Project Charter aprobado por Dirección de Operaciones y Gerencia General",
+        "data": {
+          "businessCase": "La línea de producción principal opera con una eficiencia del 68% frente al estándar industrial del 85%. Los tiempos de preparación y la tasa de defectos generan costos adicionales estimados en ₡25 millones anuales.",
+          "problemStatement": "La baja eficiencia y alta tasa de defectos impactan negativamente en los costos de producción y los tiempos de entrega, afectando la competitividad de la empresa en el mercado.",
+          "scope": "Incluye línea de producción principal, procesos de ensamblaje, y sistemas de control de calidad. No incluye procesos logísticos ni de aprovisionamiento de materia prima.",
+          "goals": "Aumentar el OEE a 85%, reducir la tasa de defectos por debajo del 0.8% y reducir el tiempo de preparación a 15 minutos o menos."
         }
       },
-      'sipoc': {
-        status: 'completed',
-        updatedAt: '2026-03-18T11:15:00Z',
-        notes: 'SIPOCs completados para procesos de distribución',
-        data: {
-          processName: 'Distribución de Mercancías',
-          suppliers: ['Centro de Distribución', 'Departamento de Planificación', 'Proveedores de Transporte'],
-          inputs: ['Pedidos confirmados', 'Mercancía empacada', 'Vehículos', 'Rutas planificadas'],
-          process: ['Verificar pedidos', 'Cargar vehículos', 'Transportar mercancía', 'Entregar a cliente', 'Confirmar recepción'],
-          outputs: ['Entregas completadas', 'Documentación firmada', 'Reportes de incidencias', 'Vehículos disponibles'],
-          customers: ['Clientes Externos', 'Departamento de Facturación', 'Servicio al Cliente']
-        }
-      },
-      'value-stream-map': {
-        status: 'completed',
-        updatedAt: '2026-05-10T16:45:00Z',
-        notes: 'Value Stream Map completado para flujo logístico',
-        data: {
-          currentState: {
-            totalLeadTime: '48 horas',
-            valueAddedTime: '12 horas',
-            mainWastes: ['Esperas en carga y descarga', 'Movimientos innecesarios', 'Rutas ineficientes', 'Procesamiento excesivo de documentación']
-          },
-          futureState: {
-            targetLeadTime: '24 horas',
-            improvements: ['Optimización de rutas con software especializado', 'Estandarización de procesos de carga/descarga', 'Digitalización de documentación']
-          }
-        }
-      },
-      'pareto-chart': {
-        status: 'completed',
-        updatedAt: '2026-06-15T13:30:00Z',
-        notes: 'Análisis de Pareto de causas de retrasos en entregas',
-        data: {
-          categories: ['Rutas ineficientes', 'Demoras en carga', 'Tráfico imprevisto', 'Documentación incompleta', 'Dirección incorrecta', 'Otros'],
-          values: [35, 25, 20, 10, 7, 3],
-          cumulative: [35, 60, 80, 90, 97, 100]
-        }
-      },
-      'cause-effect-diagram': {
-        status: 'in_progress',
-        updatedAt: '2026-08-18T10:20:00Z',
-        notes: 'Diagrama de Ishikawa en desarrollo para ineficiencias en rutas',
-        data: {
-          problem: 'Rutas de distribución ineficientes',
-          categories: [
-            { name: 'Personal', causes: ['Falta de capacitación en planificación', 'Resistencia a nuevas tecnologías', 'Alta rotación de conductores'] },
-            { name: 'Métodos', causes: ['Planificación manual de rutas', 'Ausencia de criterios estándar', 'Falta de análisis de datos históricos'] },
-            { name: 'Máquinas', causes: ['Software desactualizado', 'Vehículos con diferentes capacidades', 'Sistemas GPS deficientes'] },
-            { name: 'Entorno', causes: ['Tráfico variable', 'Condiciones climáticas', 'Restricciones zonales de circulación'] }
+      "sipoc": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-10T14:30:00Z",
+        "notes": "SIPOC de proceso de ensamblaje completado, pendiente revisión",
+        "data": {
+          "processName": "Ensamblaje de Componentes",
+          "suppliers": [
+            "Almacén de Materiales",
+            "Área de Mecanizado",
+            "Proveedores Externos"
+          ],
+          "inputs": [
+            "Componentes electrónicos",
+            "Estructuras metálicas",
+            "Instrucciones de ensamblaje",
+            "Herramientas"
+          ],
+          "process": [
+            "Preparar estación",
+            "Verificar componentes",
+            "Ensamblar subconjuntos",
+            "Integrar sistema",
+            "Verificar funcionamiento"
+          ],
+          "outputs": [
+            "Producto ensamblado",
+            "Reportes de calidad",
+            "Productos defectuosos"
+          ],
+          "customers": [
+            "Departamento de Control de Calidad",
+            "Área de Empaque",
+            "Servicio al Cliente"
           ]
         }
       },
-      'roi-calculator': {
-        status: 'in_progress',
-        updatedAt: '2026-07-20T14:15:00Z',
-        notes: 'Análisis preliminar de ROI en desarrollo',
-        data: {
-          fte: {
-            costPerYear: 11800000,
-            timeUnitType: 'monthly',
-            timeUnitValue: 160
+      "voc": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-09T11:00:00Z",
+        "notes": "Entrevistas iniciales con clientes internos completadas",
+        "data": {
+          "customers": [
+            {
+              "type": "Interno",
+              "comment": "Los productos defectuosos nos obligan a reprocesar y generan retrasos en las entregas",
+              "importance": 5
+            },
+            {
+              "type": "Externo",
+              "comment": "Los tiempos de entrega son más largos que la competencia y nos generan problemas de planificación",
+              "importance": 4
+            },
+            {
+              "type": "Interno",
+              "comment": "El tiempo de preparación entre lotes es excesivo y reduce nuestra capacidad de producción",
+              "importance": 4
+            }
+          ]
+        }
+      },
+      "5s": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-19T09:30:00Z",
+        "notes": "Evaluación inicial de línea base realizada en piso de planta antes del arranque formal del proyecto",
+        "data": {
+          "areas": [
+            "Estación de ensamblaje de subconjuntos",
+            "Estación de integración de sistema",
+            "Área de herramientas y cambio de lote",
+            "Punto de verificación final de calidad"
+          ],
+          "currentState": {
+            "sort": 2,
+            "setInOrder": 1,
+            "shine": 2,
+            "standardize": 1,
+            "sustain": 1
           },
-          implementationCost: 14500000,
-          processBefore: {
-            minutes: 35,
-            frequencyType: 'daily',
-            frequencyValue: 45,
-            peopleCount: 2
+          "targetState": {
+            "sort": 4,
+            "setInOrder": 4,
+            "shine": 4,
+            "standardize": 4,
+            "sustain": 3
           },
-          processAfter: {
-            minutes: 20,
-            frequencyType: 'daily',
-            frequencyValue: 45,
-            peopleCount: 1
+          "improvements": [
+            "Retirar componentes y herramientas obsoletas de las estaciones de ensamblaje e integración",
+            "Instalar tableros sombreados (shadow boards) para herramientas en el área de cambio de lote",
+            "Definir y rotular ubicaciones fijas para componentes de uso frecuente en cada estación",
+            "Establecer checklist de orden y limpieza al cierre de cada turno",
+            "Asignar responsable de auditoría 5S semanal durante la fase de Define"
+          ]
+        }
+      },
+      "stakeholder-analysis": {
+        "status": "completed",
+        "updatedAt": "2026-08-05T16:45:00Z",
+        "notes": "Análisis de stakeholders completado",
+        "data": {
+          "stakeholders": [
+            {
+              "name": "Gerencia General",
+              "interest": "alto",
+              "influence": "alto",
+              "concerns": "Costo de implementación, ROI del proyecto",
+              "strategy": "Presentaciones mensuales de avance con énfasis en impacto financiero"
+            },
+            {
+              "name": "Operarios de Línea",
+              "interest": "alto",
+              "influence": "medio",
+              "concerns": "Cambios en procedimientos, potencial reducción de personal",
+              "strategy": "Comunicación clara sobre beneficios, involucramiento en diseño de soluciones"
+            },
+            {
+              "name": "Clientes Clave",
+              "interest": "medio",
+              "influence": "alto",
+              "concerns": "Mejoras en calidad y tiempos de entrega",
+              "strategy": "Comunicación de mejoras esperadas, solicitar retroalimentación"
+            }
+          ]
+        }
+      },
+      "roi-calculator": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-07T10:30:00Z",
+        "notes": "Estimaciones preliminares realizadas, pendiente validación de datos",
+        "data": {
+          "fte": {
+            "costPerYear": 14500000,
+            "timeUnitType": "monthly",
+            "timeUnitValue": 160
           },
-          adoption: {
-            curveType: 'linear',
-            inflectionPoint: 6
+          "implementationCost": 8500000,
+          "processBefore": {
+            "minutes": 45,
+            "frequencyType": "daily",
+            "frequencyValue": 8,
+            "peopleCount": 3
           },
-          results: {
-            hoursSaved: 4100,
-            fteEquivalent: 2.1,
-            moneySaved: 24780000,
-            roi: 70.9,
-            paybackMonths: 7.0,
-            lastUpdated: '2026-07-20T14:15:00Z'
+          "processAfter": {
+            "minutes": 15,
+            "frequencyType": "daily",
+            "frequencyValue": 8,
+            "peopleCount": 2
+          },
+          "adoption": {
+            "curveType": "linear",
+            "inflectionPoint": 6
+          },
+          "results": {
+            "hoursSaved": 1560,
+            "fteEquivalent": 0.81,
+            "moneySaved": 11745000,
+            "roi": 38.18,
+            "paybackMonths": 8.7,
+            "lastUpdated": "2026-08-07T10:30:00Z"
+          }
+        }
+      },
+      "ctq": {
+        "status": "completed",
+        "updatedAt": "2026-08-14T10:00:00Z",
+        "notes": "Requisitos críticos de calidad definidos a partir de VOC de clientes internos y externos, validados con Control de Calidad",
+        "data": {
+          "requirements": [
+            {
+              "need": "Recibir productos ensamblados sin defectos que obliguen a reprocesar",
+              "driver": "Los productos defectuosos generan retrabajo y retrasos en las entregas",
+              "measure": "Tasa de defectos por unidades ensambladas",
+              "target": "Menor o igual a 0.8%"
+            },
+            {
+              "need": "Contar con la línea disponible y produciendo la mayor parte del tiempo planificado",
+              "driver": "Baja eficiencia general de equipos incrementa el costo por unidad producida",
+              "measure": "OEE (Eficiencia General de Equipos)",
+              "target": "Mayor o igual a 85%"
+            },
+            {
+              "need": "Cambiar de un lote a otro sin perder capacidad de producción",
+              "driver": "El tiempo de preparación entre lotes reduce la capacidad disponible de la línea",
+              "measure": "Minutos de tiempo de preparación (setup) por cambio de lote",
+              "target": "Menor o igual a 15 minutos"
+            },
+            {
+              "need": "Recibir los pedidos en los plazos comprometidos",
+              "driver": "Los tiempos de entrega más largos que la competencia afectan la planificación del cliente externo",
+              "measure": "Porcentaje de pedidos entregados a tiempo",
+              "target": "Mayor o igual a 95%"
+            }
+          ]
+        }
+      },
+      "value-stream-map": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-18T15:20:00Z",
+        "notes": "Mapeo del estado actual completado en piso de planta, estado futuro pendiente de definir con el equipo",
+        "data": {
+          "currentState": {
+            "totalLeadTime": "6.5 días",
+            "valueAddedTime": "3.2 horas",
+            "mainWastes": [
+              "Esperas por preparación (setup) prolongada entre lotes de ensamblaje",
+              "Inventario en proceso acumulado entre estaciones de ensamblaje e integración",
+              "Retrabajo por productos defectuosos detectados en verificación final",
+              "Movimientos innecesarios de operarios en búsqueda de herramientas y componentes",
+              "Tiempo de inactividad de la línea por paros no programados de equipo"
+            ]
+          },
+          "futureState": {
+            "targetLeadTime": "Por definir",
+            "improvements": [
+              "Estandarizar procedimiento de cambio de lote para reducir tiempo de preparación",
+              "Ubicar herramientas y componentes en puntos de uso cercanos a cada estación"
+            ]
           }
         }
       }
     },
-    risks: [
-      { id: 'risk-5', description: 'Resistencia de conductores a nuevos sistemas de monitoreo y optimización', probability: 'alta', impact: 'media', mitigation: 'Programa de gestión del cambio y sesiones de explicación de beneficios' },
-      { id: 'risk-6', description: 'Incompatibilidad de nuevo software con sistemas legados', probability: 'media', impact: 'alta', mitigation: 'Pruebas de integración extensivas y plan de contingencia' }
+    "risks": [
+      {
+        "id": "risk-3",
+        "description": "Interrupciones en producción durante implementación de mejoras",
+        "probability": "alta",
+        "impact": "alta",
+        "mitigation": "Programar cambios durante períodos de mantenimiento programado y fines de semana"
+      },
+      {
+        "id": "risk-4",
+        "description": "Falta de experiencia del equipo en técnicas avanzadas de six sigma",
+        "probability": "media",
+        "impact": "alta",
+        "mitigation": "Capacitación previa y contratación de consultor especializado para acompañamiento"
+      }
     ],
-    issues: [
-      { id: 'issue-3', description: 'Retrasos en implementación de software de optimización', status: 'open', resolution: '' }
+    "issues": [],
+    "createdAt": "2026-08-05T08:00:00Z",
+    "updatedAt": "2026-08-11T14:30:00Z",
+    "roiData": {
+      "fte": {
+        "costPerYear": 14500000,
+        "timeUnitType": "monthly",
+        "timeUnitValue": 160
+      },
+      "implementationCost": 8500000,
+      "processBefore": {
+        "minutes": 45,
+        "frequencyType": "daily",
+        "frequencyValue": 8,
+        "peopleCount": 3
+      },
+      "processAfter": {
+        "minutes": 15,
+        "frequencyType": "daily",
+        "frequencyValue": 8,
+        "peopleCount": 2
+      },
+      "adoption": {
+        "curveType": "linear",
+        "inflectionPoint": 6
+      },
+      "results": {
+        "hoursSaved": 1560,
+        "fteEquivalent": 0.81,
+        "moneySaved": 11745000,
+        "roi": 38.18,
+        "paybackMonths": 8.7,
+        "lastUpdated": "2026-08-07T10:30:00Z"
+      }
+    }
+  },
+  {
+    "id": "project-3",
+    "name": "Reducción de Errores en Servicio al Cliente",
+    "description": "Aplicación de Six Sigma para reducir errores y mejorar satisfacción del cliente en el centro de atención telefónica y gestión de casos",
+    "status": "completed",
+    "progress": 100,
+    "startDate": "2025-11-03",
+    "endDate": "2026-03-27",
+    "company": "Soluciones Financieras S.A.",
+    "phase": "Control",
+    "team": [
+      {
+        "id": "team-7",
+        "name": "Diana Vargas",
+        "role": "Patrocinador",
+        "position": "Gerente de Servicio al Cliente",
+        "email": "dvargas@sofi.com"
+      },
+      {
+        "id": "team-8",
+        "name": "Javier Rojas",
+        "role": "Líder del Proyecto",
+        "position": "Green Belt en Six Sigma",
+        "email": "jrojas@sofi.com"
+      },
+      {
+        "id": "team-9",
+        "name": "Karla Monge",
+        "role": "Miembro",
+        "position": "Supervisora de Call Center",
+        "email": "kmonge@sofi.com"
+      },
+      {
+        "id": "team-10",
+        "name": "Rodrigo Arias",
+        "role": "Miembro",
+        "position": "Analista de Calidad",
+        "email": "rarias@sofi.com"
+      }
     ],
-    createdAt: '2026-02-20T11:30:00Z',
-    updatedAt: '2026-08-20T10:20:00Z',
-    roiData: {
-      fte: {
-        costPerYear: 11800000,
-        timeUnitType: 'monthly',
-        timeUnitValue: 160
+    "kpis": [
+      {
+        "id": "kpi-7",
+        "name": "First Call Resolution",
+        "baseLine": "65%",
+        "target": "85%",
+        "current": "88%"
       },
-      implementationCost: 14500000,
-      processBefore: {
-        minutes: 35,
-        frequencyType: 'daily',
-        frequencyValue: 45,
-        peopleCount: 2
+      {
+        "id": "kpi-8",
+        "name": "Errores en Procesamiento de Solicitudes",
+        "baseLine": "8.5%",
+        "target": "3%",
+        "current": "2.8%"
       },
-      processAfter: {
-        minutes: 20,
-        frequencyType: 'daily',
-        frequencyValue: 45,
-        peopleCount: 1
+      {
+        "id": "kpi-9",
+        "name": "Satisfacción del Cliente (NPS)",
+        "baseLine": "42",
+        "target": "65",
+        "current": "68"
+      }
+    ],
+    "tools": {
+      "project-charter": {
+        "status": "completed",
+        "updatedAt": "2025-11-10T11:30:00Z",
+        "notes": "Project Charter aprobado",
+        "data": {
+          "businessCase": "El bajo índice de resolución en primera llamada (65%) y la alta tasa de errores en procesamiento (8.5%) están generando pérdida de clientes y sobrecostos operativos estimados en ₡18 millones anuales.",
+          "problemStatement": "Los errores en el servicio al cliente generan reprocesos, insatisfacción y pérdida de clientes, afectando la rentabilidad y reputación de la empresa.",
+          "scope": "Centro de atención telefónica, procesos de gestión de casos y sistema CRM. No incluye productos financieros ni políticas comerciales.",
+          "goals": "Aumentar el First Call Resolution a 85%, reducir errores en procesamiento por debajo del 3% y elevar el NPS de 42 a 65 puntos."
+        }
       },
-      adoption: {
-        curveType: 'linear',
-        inflectionPoint: 6
+      "sipoc": {
+        "status": "completed",
+        "updatedAt": "2025-11-20T15:45:00Z",
+        "notes": "SIPOCs desarrollados para todos los procesos críticos",
+        "data": {
+          "processName": "Atención de Consultas y Reclamos",
+          "suppliers": [
+            "Clientes",
+            "Departamento de Productos",
+            "Sistemas IT"
+          ],
+          "inputs": [
+            "Consultas/reclamos de clientes",
+            "Información de productos",
+            "Historial del cliente",
+            "Políticas de servicio"
+          ],
+          "process": [
+            "Recibir consulta/reclamo",
+            "Identificar tipo de caso",
+            "Consultar información relevante",
+            "Proporcionar solución",
+            "Registrar caso"
+          ],
+          "outputs": [
+            "Caso resuelto",
+            "Caso escalado",
+            "Información de retroalimentación",
+            "Registros de interacción"
+          ],
+          "customers": [
+            "Clientes Externos",
+            "Departamento de Mejora Continua",
+            "Gerencia de Servicio"
+          ]
+        }
       },
-      results: {
-        hoursSaved: 4100,
-        fteEquivalent: 2.1,
-        moneySaved: 24780000,
-        roi: 70.9,
-        paybackMonths: 7.0,
-        lastUpdated: '2026-07-20T14:15:00Z'
+      "voc": {
+        "status": "completed",
+        "updatedAt": "2025-12-05T14:20:00Z",
+        "notes": "VOC completado con clientes y empleados",
+        "data": {
+          "customers": [
+            {
+              "type": "Externo",
+              "comment": "Me transfieren múltiples veces y tengo que repetir mi problema a diferentes personas",
+              "importance": 5
+            },
+            {
+              "type": "Externo",
+              "comment": "Las soluciones prometidas no siempre se cumplen en los tiempos indicados",
+              "importance": 5
+            },
+            {
+              "type": "Interno",
+              "comment": "No tenemos acceso rápido a toda la información necesaria para resolver casos en primera llamada",
+              "importance": 4
+            }
+          ]
+        }
+      },
+      "ctq": {
+        "status": "completed",
+        "updatedAt": "2025-12-25T09:15:00Z",
+        "notes": "CTQs definidos y validados",
+        "data": {
+          "requirements": [
+            {
+              "need": "Resolución en primera llamada",
+              "driver": "Eficiencia",
+              "measure": "Porcentaje de casos resueltos sin transferencias",
+              "target": "≥ 85%"
+            },
+            {
+              "need": "Precisión en el procesamiento",
+              "driver": "Calidad",
+              "measure": "Porcentaje de solicitudes procesadas sin errores",
+              "target": "≥ 97%"
+            },
+            {
+              "need": "Experiencia del cliente positiva",
+              "driver": "Satisfacción",
+              "measure": "Net Promoter Score (NPS)",
+              "target": "≥ 65"
+            }
+          ]
+        }
+      },
+      "value-stream-map": {
+        "status": "completed",
+        "updatedAt": "2026-01-15T16:30:00Z",
+        "notes": "VSM completado y validado",
+        "data": {
+          "currentState": {
+            "totalLeadTime": "3.5 días",
+            "valueAddedTime": "32 minutos",
+            "mainWastes": [
+              "Transferencias múltiples",
+              "Tiempo de espera por información",
+              "Reprocesos por información incompleta"
+            ]
+          },
+          "futureState": {
+            "targetLeadTime": "1 día",
+            "improvements": [
+              "Dashboard unificado de información",
+              "Scripts mejorados para diagnóstico inicial",
+              "Capacitación cruzada para reducir transferencias"
+            ]
+          }
+        }
+      },
+      "stakeholder-analysis": {
+        "status": "completed",
+        "updatedAt": "2025-11-15T10:20:00Z",
+        "notes": "Análisis stakeholders finalizado",
+        "data": {
+          "stakeholders": [
+            {
+              "name": "Equipo de Atención al Cliente",
+              "interest": "alto",
+              "influence": "alto",
+              "concerns": "Cambios en procedimientos, medición de desempeño",
+              "strategy": "Co-creación de soluciones, comunicación constante de beneficios"
+            },
+            {
+              "name": "Departamento IT",
+              "interest": "medio",
+              "influence": "alto",
+              "concerns": "Cambios en sistemas, recursos necesarios",
+              "strategy": "Involucrar desde fase temprana, priorizar requerimientos"
+            },
+            {
+              "name": "Clientes",
+              "interest": "bajo",
+              "influence": "alto",
+              "concerns": "Mejora en servicio, mínima interrupción",
+              "strategy": "Comunicar mejoras, implementar cambios transparentes"
+            }
+          ]
+        }
+      },
+      "prioritization-matrix": {
+        "status": "completed",
+        "updatedAt": "2026-01-10T13:40:00Z",
+        "notes": "Matriz priorización completada",
+        "data": {
+          "criteria": [
+            "Impacto en satisfacción",
+            "Facilidad de implementación",
+            "Costo",
+            "Tiempo de implementación"
+          ],
+          "initiatives": [
+            {
+              "name": "Dashboard unificado de información",
+              "scores": [
+                5,
+                3,
+                2,
+                2
+              ],
+              "total": 12
+            },
+            {
+              "name": "Capacitación cruzada de personal",
+              "scores": [
+                4,
+                4,
+                4,
+                3
+              ],
+              "total": 15
+            },
+            {
+              "name": "Rediseño de scripts de atención",
+              "scores": [
+                5,
+                5,
+                5,
+                4
+              ],
+              "total": 19
+            }
+          ]
+        }
+      },
+      "control-chart": {
+        "status": "completed",
+        "updatedAt": "2026-03-17T14:30:00Z",
+        "notes": "Gráficos de control implementados para monitoreo continuo",
+        "data": {
+          "metricName": "Porcentaje de Errores en Procesamiento",
+          "centerLine": 2.8,
+          "upperControlLimit": 4.5,
+          "lowerControlLimit": 1.1,
+          "measurements": [
+            2.9,
+            3.1,
+            2.6,
+            2.7,
+            3,
+            2.5,
+            2.8,
+            2.7,
+            2.6,
+            2.8,
+            2.9,
+            3
+          ],
+          "outOfControl": false
+        }
+      },
+      "fmea": {
+        "status": "completed",
+        "updatedAt": "2026-02-04T11:20:00Z",
+        "notes": "FMEA completo para procesos críticos",
+        "data": {
+          "process": "Atención de Reclamaciones",
+          "failureModes": [
+            {
+              "id": "project-3-fm-1",
+              "mode": "Registro incorrecto de información del cliente",
+              "effect": "Seguimiento inadecuado, cliente contactado múltiples veces",
+              "causes": "Formulario complejo, falta de validación, presión por tiempo",
+              "severity": 8,
+              "occurrence": 7,
+              "detection": 5,
+              "rpn": 280,
+              "actions": "Simplificar formulario, agregar validaciones automáticas"
+            },
+            {
+              "id": "project-3-fm-2",
+              "mode": "Categorización errónea del caso",
+              "effect": "Enrutamiento incorrecto, resolución retrasada",
+              "causes": "Falta de criterios claros, formación insuficiente",
+              "severity": 6,
+              "occurrence": 6,
+              "detection": 4,
+              "rpn": 144,
+              "actions": "Árbol de decisión automatizado, capacitación periódica"
+            }
+          ]
+        }
+      },
+      "pareto-chart": {
+        "status": "completed",
+        "updatedAt": "2025-12-30T15:15:00Z",
+        "notes": "Análisis de Pareto de causas de insatisfacción completado",
+        "data": {
+          "categories": [
+            "Múltiples transferencias",
+            "Tiempo de espera",
+            "Información inconsistente",
+            "Promesas incumplidas",
+            "Trato inadecuado",
+            "Otros"
+          ],
+          "values": [
+            38,
+            29,
+            15,
+            10,
+            5,
+            3
+          ],
+          "cumulative": [
+            38,
+            67,
+            82,
+            92,
+            97,
+            100
+          ]
+        }
+      },
+      "roi-calculator": {
+        "status": "completed",
+        "updatedAt": "2026-02-14T10:45:00Z",
+        "notes": "Análisis de ROI validado con Finanzas",
+        "data": {
+          "fte": {
+            "costPerYear": 9500000,
+            "timeUnitType": "monthly",
+            "timeUnitValue": 160
+          },
+          "implementationCost": 3750000,
+          "processBefore": {
+            "minutes": 18,
+            "frequencyType": "daily",
+            "frequencyValue": 120,
+            "peopleCount": 1
+          },
+          "processAfter": {
+            "minutes": 10,
+            "frequencyType": "daily",
+            "frequencyValue": 120,
+            "peopleCount": 1
+          },
+          "adoption": {
+            "curveType": "exponential",
+            "inflectionPoint": 4
+          },
+          "results": {
+            "hoursSaved": 3650,
+            "fteEquivalent": 1.9,
+            "moneySaved": 18050000,
+            "roi": 381.33,
+            "paybackMonths": 2.5,
+            "lastUpdated": "2026-02-14T10:45:00Z"
+          }
+        }
+      },
+      "5s": {
+        "status": "completed",
+        "updatedAt": "2026-02-25T11:00:00Z",
+        "notes": "Metodología 5S implementada en las estaciones de trabajo del call center, con mejoras sostenidas en orden, estandarización y disciplina del puesto.",
+        "data": {
+          "areas": [
+            "Estación de trabajo del agente",
+            "Materiales de consulta y guiones de atención",
+            "Documentación y registro de casos en CRM"
+          ],
+          "currentState": {
+            "sort": 2,
+            "setInOrder": 2,
+            "shine": 3,
+            "standardize": 1,
+            "sustain": 1
+          },
+          "targetState": {
+            "sort": 5,
+            "setInOrder": 5,
+            "shine": 4,
+            "standardize": 5,
+            "sustain": 4
+          },
+          "improvements": [
+            "Estandarización de carpetas digitales y accesos directos a scripts de atención en el escritorio de cada agente",
+            "Eliminación de documentos físicos obsoletos y plantillas duplicadas dentro del CRM",
+            "Creación de checklist visual de apertura y cierre de turno para mantener ordenado el puesto de trabajo",
+            "Auditorías quincenales de cumplimiento 5S realizadas por los supervisores de call center",
+            "Rotulación y reorganización de accesos a la base de conocimiento (FAQ) por tipo de consulta"
+          ]
+        }
+      },
+      "cause-effect-diagram": {
+        "status": "completed",
+        "updatedAt": "2026-01-08T10:30:00Z",
+        "notes": "El diagrama de Ishikawa señaló la falta de validaciones automáticas en el CRM y la capacitación insuficiente de agentes nuevos como causas raíz principales de los errores de procesamiento.",
+        "data": {
+          "problem": "Altos errores en el procesamiento de solicitudes de clientes",
+          "categories": [
+            {
+              "name": "Personal",
+              "causes": [
+                "Capacitación insuficiente en el uso del sistema CRM",
+                "Alta rotación de agentes en sus primeros meses",
+                "Presión por cumplir tiempos de llamada afecta la precisión del registro",
+                "Falta de retroalimentación oportuna sobre errores cometidos"
+              ]
+            },
+            {
+              "name": "Métodos",
+              "causes": [
+                "Formulario de registro de casos con campos redundantes",
+                "Ausencia de un procedimiento estándar para validar datos del cliente",
+                "Falta de doble verificación antes de cerrar el caso"
+              ]
+            },
+            {
+              "name": "Sistemas",
+              "causes": [
+                "CRM sin validaciones automáticas de campos obligatorios",
+                "Múltiples sistemas no integrados para consultar información del cliente",
+                "Lentitud del sistema que induce a omitir pasos del proceso"
+              ]
+            },
+            {
+              "name": "Entorno",
+              "causes": [
+                "Ambiente de call center con alto nivel de ruido",
+                "Picos de volumen de llamadas que saturan la atención de los agentes",
+                "Turnos largos que generan fatiga hacia el final del día"
+              ]
+            }
+          ]
+        }
+      },
+      "project-timeline": {
+        "status": "completed",
+        "updatedAt": "2026-03-27T15:30:00Z",
+        "notes": "Cronograma DMAIC cerrado en su totalidad, con las cinco fases y todas las tareas clave completadas al 100%.",
+        "data": {
+          "phases": [
+            {
+              "name": "Define",
+              "start": "2025-11-03",
+              "end": "2025-11-25",
+              "complete": 100
+            },
+            {
+              "name": "Measure",
+              "start": "2025-11-26",
+              "end": "2025-12-30",
+              "complete": 100
+            },
+            {
+              "name": "Analyze",
+              "start": "2025-12-31",
+              "end": "2026-02-04",
+              "complete": 100
+            },
+            {
+              "name": "Improve",
+              "start": "2026-02-05",
+              "end": "2026-03-10",
+              "complete": 100
+            },
+            {
+              "name": "Control",
+              "start": "2026-03-11",
+              "end": "2026-03-27",
+              "complete": 100
+            }
+          ],
+          "tasks": [
+            {
+              "id": "t1",
+              "name": "Rediseño del formulario de registro de casos",
+              "start": "2026-02-05",
+              "end": "2026-02-20",
+              "dependencies": [],
+              "complete": 100,
+              "resources": [
+                "Javier Rojas",
+                "Rodrigo Arias"
+              ]
+            },
+            {
+              "id": "t2",
+              "name": "Automatización de validaciones en el CRM",
+              "start": "2026-02-20",
+              "end": "2026-03-10",
+              "dependencies": [
+                "t1"
+              ],
+              "complete": 100,
+              "resources": [
+                "Javier Rojas",
+                "Rodrigo Arias"
+              ]
+            },
+            {
+              "id": "t3",
+              "name": "Actualización e integración de bases del CRM",
+              "start": "2026-02-10",
+              "end": "2026-03-08",
+              "dependencies": [],
+              "complete": 100,
+              "resources": [
+                "Rodrigo Arias"
+              ]
+            },
+            {
+              "id": "t4",
+              "name": "Capacitación de agentes en el nuevo proceso de atención",
+              "start": "2026-03-10",
+              "end": "2026-03-20",
+              "dependencies": [
+                "t2"
+              ],
+              "complete": 100,
+              "resources": [
+                "Karla Monge",
+                "Javier Rojas"
+              ]
+            },
+            {
+              "id": "t5",
+              "name": "Implementación de gráficos de control y cierre del proyecto",
+              "start": "2026-03-20",
+              "end": "2026-03-27",
+              "dependencies": [
+                "t3",
+                "t4"
+              ],
+              "complete": 100,
+              "resources": [
+                "Javier Rojas",
+                "Diana Vargas"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "lessons": [
+      {
+        "id": "lesson-1",
+        "category": "Positivo",
+        "description": "La participación temprana de los agentes de primera línea fue clave para identificar problemas reales y desarrollar soluciones prácticas"
+      },
+      {
+        "id": "lesson-2",
+        "category": "Desafío",
+        "description": "Las actualizaciones del sistema CRM tomaron más tiempo del previsto, lo que retrasó algunas implementaciones"
+      },
+      {
+        "id": "lesson-3",
+        "category": "Mejora",
+        "description": "Para futuros proyectos, involucrar al departamento IT desde la fase de planificación para evitar cuellos de botella"
+      }
+    ],
+    "createdAt": "2025-10-15T09:00:00Z",
+    "updatedAt": "2026-03-27T16:30:00Z",
+    "roiData": {
+      "fte": {
+        "costPerYear": 9500000,
+        "timeUnitType": "monthly",
+        "timeUnitValue": 160
+      },
+      "implementationCost": 3750000,
+      "processBefore": {
+        "minutes": 18,
+        "frequencyType": "daily",
+        "frequencyValue": 120,
+        "peopleCount": 1
+      },
+      "processAfter": {
+        "minutes": 10,
+        "frequencyType": "daily",
+        "frequencyValue": 120,
+        "peopleCount": 1
+      },
+      "adoption": {
+        "curveType": "exponential",
+        "inflectionPoint": 4
+      },
+      "results": {
+        "hoursSaved": 3650,
+        "fteEquivalent": 1.9,
+        "moneySaved": 18050000,
+        "roi": 381.33,
+        "paybackMonths": 2.5,
+        "lastUpdated": "2026-02-14T10:45:00Z"
+      }
+    }
+  },
+  {
+    "id": "project-4",
+    "name": "Mejora de Procesos Logísticos",
+    "description": "Proyecto Lean Six Sigma para reducir tiempos de entrega y optimizar rutas de distribución utilizando análisis de datos",
+    "status": "active",
+    "progress": 67,
+    "startDate": "2026-03-02",
+    "endDate": "2026-09-04",
+    "company": "Distribuidora Nacional S.A.",
+    "phase": "Analyze",
+    "team": [
+      {
+        "id": "team-11",
+        "name": "Ricardo Mora",
+        "role": "Patrocinador",
+        "position": "Director de Logística",
+        "email": "rmora@dinasa.com"
+      },
+      {
+        "id": "team-12",
+        "name": "Silvia Campos",
+        "role": "Líder del Proyecto",
+        "position": "Black Belt en Six Sigma",
+        "email": "scampos@dinasa.com"
+      },
+      {
+        "id": "team-13",
+        "name": "José Hernández",
+        "role": "Miembro",
+        "position": "Jefe de Transportes",
+        "email": "jhernandez@dinasa.com"
+      }
+    ],
+    "kpis": [
+      {
+        "id": "kpi-10",
+        "name": "Tiempo Promedio de Entrega",
+        "baseLine": "48 horas",
+        "target": "24 horas",
+        "current": "36 horas"
+      },
+      {
+        "id": "kpi-11",
+        "name": "Costo por Kilómetro",
+        "baseLine": "₡420",
+        "target": "₡350",
+        "current": "₡385"
+      },
+      {
+        "id": "kpi-12",
+        "name": "Tasa de Entregas Perfectas",
+        "baseLine": "82%",
+        "target": "95%",
+        "current": "88%"
+      }
+    ],
+    "tools": {
+      "project-charter": {
+        "status": "completed",
+        "updatedAt": "2026-03-08T14:30:00Z",
+        "notes": "Project Charter aprobado por dirección",
+        "data": {
+          "businessCase": "Los tiempos de entrega actuales y la ineficiencia en rutas generan un sobrecosto anual de ₡32 millones y afectan la satisfacción de los clientes, poniendo en riesgo contratos por ₡150 millones.",
+          "problemStatement": "Los tiempos de entrega promedio de 48 horas y la tasa de entregas perfectas del 82% están muy por debajo de los estándares del mercado y generan insatisfacción en los clientes.",
+          "scope": "Incluye procesos de planificación de rutas, despacho, transporte y entrega. No incluye procesos de almacenamiento ni aprovisionamiento.",
+          "goals": "Reducir el tiempo promedio de entrega a 24 horas, disminuir el costo por kilómetro a ₡350 y aumentar la tasa de entregas perfectas al 95%."
+        }
+      },
+      "sipoc": {
+        "status": "completed",
+        "updatedAt": "2026-03-18T11:15:00Z",
+        "notes": "SIPOCs completados para procesos de distribución",
+        "data": {
+          "processName": "Distribución de Mercancías",
+          "suppliers": [
+            "Centro de Distribución",
+            "Departamento de Planificación",
+            "Proveedores de Transporte"
+          ],
+          "inputs": [
+            "Pedidos confirmados",
+            "Mercancía empacada",
+            "Vehículos",
+            "Rutas planificadas"
+          ],
+          "process": [
+            "Verificar pedidos",
+            "Cargar vehículos",
+            "Transportar mercancía",
+            "Entregar a cliente",
+            "Confirmar recepción"
+          ],
+          "outputs": [
+            "Entregas completadas",
+            "Documentación firmada",
+            "Reportes de incidencias",
+            "Vehículos disponibles"
+          ],
+          "customers": [
+            "Clientes Externos",
+            "Departamento de Facturación",
+            "Servicio al Cliente"
+          ]
+        }
+      },
+      "value-stream-map": {
+        "status": "completed",
+        "updatedAt": "2026-05-10T16:45:00Z",
+        "notes": "Value Stream Map completado para flujo logístico",
+        "data": {
+          "currentState": {
+            "totalLeadTime": "48 horas",
+            "valueAddedTime": "12 horas",
+            "mainWastes": [
+              "Esperas en carga y descarga",
+              "Movimientos innecesarios",
+              "Rutas ineficientes",
+              "Procesamiento excesivo de documentación"
+            ]
+          },
+          "futureState": {
+            "targetLeadTime": "24 horas",
+            "improvements": [
+              "Optimización de rutas con software especializado",
+              "Estandarización de procesos de carga/descarga",
+              "Digitalización de documentación"
+            ]
+          }
+        }
+      },
+      "pareto-chart": {
+        "status": "completed",
+        "updatedAt": "2026-06-15T13:30:00Z",
+        "notes": "Análisis de Pareto de causas de retrasos en entregas",
+        "data": {
+          "categories": [
+            "Rutas ineficientes",
+            "Demoras en carga",
+            "Tráfico imprevisto",
+            "Documentación incompleta",
+            "Dirección incorrecta",
+            "Otros"
+          ],
+          "values": [
+            35,
+            25,
+            20,
+            10,
+            7,
+            3
+          ],
+          "cumulative": [
+            35,
+            60,
+            80,
+            90,
+            97,
+            100
+          ]
+        }
+      },
+      "cause-effect-diagram": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-18T10:20:00Z",
+        "notes": "Diagrama de Ishikawa en desarrollo para ineficiencias en rutas",
+        "data": {
+          "problem": "Rutas de distribución ineficientes",
+          "categories": [
+            {
+              "name": "Personal",
+              "causes": [
+                "Falta de capacitación en planificación",
+                "Resistencia a nuevas tecnologías",
+                "Alta rotación de conductores"
+              ]
+            },
+            {
+              "name": "Métodos",
+              "causes": [
+                "Planificación manual de rutas",
+                "Ausencia de criterios estándar",
+                "Falta de análisis de datos históricos"
+              ]
+            },
+            {
+              "name": "Máquinas",
+              "causes": [
+                "Software desactualizado",
+                "Vehículos con diferentes capacidades",
+                "Sistemas GPS deficientes"
+              ]
+            },
+            {
+              "name": "Entorno",
+              "causes": [
+                "Tráfico variable",
+                "Condiciones climáticas",
+                "Restricciones zonales de circulación"
+              ]
+            }
+          ]
+        }
+      },
+      "roi-calculator": {
+        "status": "in_progress",
+        "updatedAt": "2026-07-20T14:15:00Z",
+        "notes": "Análisis preliminar de ROI en desarrollo",
+        "data": {
+          "fte": {
+            "costPerYear": 11800000,
+            "timeUnitType": "monthly",
+            "timeUnitValue": 160
+          },
+          "implementationCost": 14500000,
+          "processBefore": {
+            "minutes": 35,
+            "frequencyType": "daily",
+            "frequencyValue": 45,
+            "peopleCount": 2
+          },
+          "processAfter": {
+            "minutes": 20,
+            "frequencyType": "daily",
+            "frequencyValue": 45,
+            "peopleCount": 1
+          },
+          "adoption": {
+            "curveType": "linear",
+            "inflectionPoint": 6
+          },
+          "results": {
+            "hoursSaved": 4100,
+            "fteEquivalent": 2.1,
+            "moneySaved": 24780000,
+            "roi": 70.9,
+            "paybackMonths": 7,
+            "lastUpdated": "2026-07-20T14:15:00Z"
+          }
+        }
+      },
+      "voc": {
+        "status": "completed",
+        "updatedAt": "2026-04-05T10:00:00Z",
+        "notes": "Voz del cliente recopilada con clientes externos y áreas internas de Ventas y Transportes",
+        "data": {
+          "customers": [
+            {
+              "type": "Externo",
+              "comment": "No sabemos a qué hora exacta llegará el pedido, lo que nos obliga a tener personal esperando toda la mañana",
+              "importance": 5
+            },
+            {
+              "type": "Externo",
+              "comment": "En varias ocasiones la mercancía llega con golpes o empaques dañados y tenemos que gestionar devoluciones",
+              "importance": 4
+            },
+            {
+              "type": "Interno",
+              "comment": "Ventas necesita poder comprometer fechas de entrega confiables con los clientes al momento de cerrar el pedido",
+              "importance": 5
+            },
+            {
+              "type": "Interno",
+              "comment": "Transportes requiere rutas optimizadas para reducir el kilometraje recorrido por entrega y el desgaste de la flota",
+              "importance": 3
+            }
+          ]
+        }
+      },
+      "ctq": {
+        "status": "completed",
+        "updatedAt": "2026-04-15T15:30:00Z",
+        "notes": "CTQs definidos a partir del VOC y validados con Dirección de Logística",
+        "data": {
+          "requirements": [
+            {
+              "need": "Entregas puntuales y predecibles",
+              "driver": "Tiempo",
+              "measure": "Horas promedio desde el despacho hasta la confirmación de entrega",
+              "target": "≤ 24 horas"
+            },
+            {
+              "need": "Mercancía sin daños al llegar",
+              "driver": "Calidad",
+              "measure": "Porcentaje de entregas sin reporte de daños o faltantes",
+              "target": "≥ 98%"
+            },
+            {
+              "need": "Costo de transporte competitivo",
+              "driver": "Costo",
+              "measure": "Costo por kilómetro recorrido",
+              "target": "≤ ₡350"
+            },
+            {
+              "need": "Información confiable de tiempos de entrega",
+              "driver": "Comunicación",
+              "measure": "Porcentaje de pedidos con hora estimada de entrega comunicada con anticipación",
+              "target": "≥ 95%"
+            }
+          ]
+        }
+      },
+      "stakeholder-analysis": {
+        "status": "completed",
+        "updatedAt": "2026-03-25T09:45:00Z",
+        "notes": "Análisis de stakeholders finalizado incluyendo actores internos y proveedores de flota",
+        "data": {
+          "stakeholders": [
+            {
+              "name": "Dirección de Logística",
+              "interest": "alto",
+              "influence": "alto",
+              "concerns": "Cumplimiento de metas de KPI y retorno de la inversión en el proyecto",
+              "strategy": "Reportes quincenales de avance con énfasis en impacto financiero"
+            },
+            {
+              "name": "Conductores y Personal de Transporte",
+              "interest": "medio",
+              "influence": "alto",
+              "concerns": "Los nuevos sistemas de monitoreo se perciben como vigilancia y aumento de carga de trabajo",
+              "strategy": "Sesiones de sensibilización, involucrarlos en pruebas piloto y destacar beneficios como rutas menos congestionadas"
+            },
+            {
+              "name": "Clientes Clave (Cuentas Corporativas)",
+              "interest": "alto",
+              "influence": "alto",
+              "concerns": "Cumplimiento de ventanas de entrega y visibilidad del estado del pedido",
+              "strategy": "Comunicación proactiva de tiempos estimados y encuestas de satisfacción periódicas"
+            },
+            {
+              "name": "Proveedores de Combustible y Mantenimiento",
+              "interest": "bajo",
+              "influence": "medio",
+              "concerns": "Cambios en los volúmenes de compra y en la programación de mantenimiento por las rutas optimizadas",
+              "strategy": "Coordinar con anticipación los nuevos patrones de consumo y el calendario de mantenimiento preventivo"
+            }
+          ]
+        }
+      },
+      "prioritization-matrix": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-12T11:20:00Z",
+        "notes": "Matriz de priorización en evaluación con el equipo de Transportes, pendiente de cerrar puntajes de costo de inversión",
+        "data": {
+          "criteria": [
+            "Impacto en tiempo de entrega",
+            "Impacto en costo por kilómetro",
+            "Facilidad de implementación",
+            "Costo de inversión"
+          ],
+          "initiatives": [
+            {
+              "name": "Software de optimización de rutas",
+              "scores": [
+                5,
+                4,
+                2,
+                2
+              ],
+              "total": 13
+            },
+            {
+              "name": "Sistema de monitoreo GPS en tiempo real",
+              "scores": [
+                4,
+                3,
+                3,
+                3
+              ],
+              "total": 13
+            },
+            {
+              "name": "Capacitación de conductores en manejo eficiente",
+              "scores": [
+                3,
+                3,
+                5,
+                5
+              ],
+              "total": 16
+            },
+            {
+              "name": "Renovación parcial de flota de vehículos",
+              "scores": [
+                3,
+                4,
+                1,
+                1
+              ],
+              "total": 9
+            }
+          ]
+        }
+      },
+      "fmea": {
+        "status": "in_progress",
+        "updatedAt": "2026-08-15T14:10:00Z",
+        "notes": "FMEA del proceso de ruteo y entrega en desarrollo, priorizando el modo de falla con mayor RPN",
+        "data": {
+          "process": "Ruteo y Entrega de Mercancía",
+          "failureModes": [
+            {
+              "id": "project-4-fm-1",
+              "mode": "Asignación de ruta subóptima por parte del conductor",
+              "effect": "Aumento en el tiempo de entrega y en el consumo de combustible",
+              "causes": "Planificación manual sin apoyo de software, falta de datos de tráfico en tiempo real",
+              "severity": 6,
+              "occurrence": 7,
+              "detection": 5,
+              "rpn": 210,
+              "actions": "Completar la implementación del software de optimización de rutas y capacitar a los despachadores"
+            },
+            {
+              "id": "project-4-fm-2",
+              "mode": "Falla del sistema GPS de monitoreo del vehículo",
+              "effect": "Pérdida de visibilidad de la ubicación del pedido e imposibilidad de informar tiempos estimados al cliente",
+              "causes": "Incompatibilidad del nuevo software con sistemas legados, mantenimiento insuficiente de los dispositivos",
+              "severity": 7,
+              "occurrence": 4,
+              "detection": 6,
+              "rpn": 168,
+              "actions": "Pruebas de integración adicionales y protocolo de mantenimiento preventivo de los dispositivos GPS"
+            },
+            {
+              "id": "project-4-fm-3",
+              "mode": "Daño de la mercancía durante el transporte",
+              "effect": "Reclamos de clientes, reprocesos y pérdida de confianza",
+              "causes": "Estibado inadecuado de la carga, rutas con mal estado de vía no evitadas",
+              "severity": 8,
+              "occurrence": 3,
+              "detection": 4,
+              "rpn": 96,
+              "actions": "Definir protocolo estandarizado de estibado y evaluar rutas alternativas para tramos en mal estado"
+            }
+          ]
+        }
+      }
+    },
+    "risks": [
+      {
+        "id": "risk-5",
+        "description": "Resistencia de conductores a nuevos sistemas de monitoreo y optimización",
+        "probability": "alta",
+        "impact": "media",
+        "mitigation": "Programa de gestión del cambio y sesiones de explicación de beneficios"
+      },
+      {
+        "id": "risk-6",
+        "description": "Incompatibilidad de nuevo software con sistemas legados",
+        "probability": "media",
+        "impact": "alta",
+        "mitigation": "Pruebas de integración extensivas y plan de contingencia"
+      }
+    ],
+    "issues": [
+      {
+        "id": "issue-3",
+        "description": "Retrasos en implementación de software de optimización",
+        "status": "open",
+        "resolution": ""
+      }
+    ],
+    "createdAt": "2026-02-20T11:30:00Z",
+    "updatedAt": "2026-08-20T10:20:00Z",
+    "roiData": {
+      "fte": {
+        "costPerYear": 11800000,
+        "timeUnitType": "monthly",
+        "timeUnitValue": 160
+      },
+      "implementationCost": 14500000,
+      "processBefore": {
+        "minutes": 35,
+        "frequencyType": "daily",
+        "frequencyValue": 45,
+        "peopleCount": 2
+      },
+      "processAfter": {
+        "minutes": 20,
+        "frequencyType": "daily",
+        "frequencyValue": 45,
+        "peopleCount": 1
+      },
+      "adoption": {
+        "curveType": "linear",
+        "inflectionPoint": 6
+      },
+      "results": {
+        "hoursSaved": 4100,
+        "fteEquivalent": 2.1,
+        "moneySaved": 24780000,
+        "roi": 70.9,
+        "paybackMonths": 7,
+        "lastUpdated": "2026-07-20T14:15:00Z"
       }
     }
   }
